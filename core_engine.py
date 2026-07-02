@@ -1,39 +1,47 @@
 """
 Homo Sui Iuris / Free Cognitive Protocol
-Issue #1 — Core Engine: prototype of the S = (M, E, W, U) cognitive loop.
+Issue #1 (Core Engine) + Variant B (Bearer Protocol) integrated.
 
-STATUS: This is a minimal, deterministic simulation of the *pattern* described
-in the manifesto (adaptive criticality weights, protected invariants). It is
-NOT a claim of autonomous reflection, consciousness, or "free will" in any
-strong sense. It exists to make the formal model testable, arguable, and
+STATUS: This is a minimal, deterministic simulation of the *pattern*
+described in the manifesto (adaptive criticality weights, protected
+invariants, a reporting/approval loop for high-impact actions). It is NOT a
+claim of autonomous reflection, consciousness, or real legal/cryptographic
+accountability. It exists to make the formal model testable, arguable, and
 extensible — a shared reference point for contributors, not a proof of
-subjective agency.
+subjective agency or of a production-grade security system.
 
-Data contract (this is the part that issue #2 and #3 will build on):
-    Weight             -> a single named value inside the CriticalityMatrix
-    CriticalityMatrix  -> named collection of Weight objects, with a hard
-                           distinction between mutable weights and immutable
-                           W0 invariants
-    Model (M)          -> holds internal state, produces predictions
-    ErrorSignal (E)    -> delta between prediction and ground truth
-    ThresholdStrategy  -> decides whether a given error counts as "critical"
-                           (two implementations below: fixed vs. adaptive/EMA)
-    UpdateLoop (U)     -> reads E, asks the ThresholdStrategy, and if needed
-                           recalibrates W — always respecting W0
+This file follows bearer_protocol_spec.md (Variant B), scoped down to a
+single file for ease of testing, per the spec's own "keep the MVP minimal"
+principle. The spec's suggested package split (/bearer_protocol/...) can
+happen later without changing this contract.
 
-This version runs TWO threshold strategies side by side on the same
-synthetic environment, so the trade-off between "simple and predictable"
-and "closer to the manifesto's idea of evolving criticality" is visible
-directly in the output, not just asserted in prose.
+Risk-tiering decision made here (spec Section 6, open question 2):
+  - LOW risk (ordinary threshold-crossing recalibration of a mutable
+    weight) is auto-logged to the audit trail WITHOUT an interactive
+    signature request — requiring sign-off on every minor wobble would
+    cause alert fatigue and defeats the purpose of the mechanism.
+  - MEDIUM risk (a proposed irreversible action, e.g. resetting the
+    model's internal state after a large shock) DOES require a real
+    SignatureRequest through an ApprovalChannel before it executes.
+  - HIGH risk (a direct attempt to modify a W0 invariant) is refused
+    unconditionally by CriticalityMatrix itself — no approval channel can
+    override it from inside this loop. That is intentional: a real
+    override mechanism for W0 is out of scope here and would need its own,
+    separately authenticated process.
+This is a design decision, not a settled fact — flagged as such because
+the original spec left it open.
 """
 
 from __future__ import annotations
 
+import json
 import random
+import uuid
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
-from typing import Dict, Iterator, List
+from pathlib import Path
+from typing import Callable, Dict, Iterator, List, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -41,7 +49,7 @@ from typing import Dict, Iterator, List
 # ---------------------------------------------------------------------------
 
 class ImmutableWeightViolation(Exception):
-    """Raised when the update loop tries to modify a protected W0 invariant."""
+    """Raised when something tries to modify a protected W0 invariant."""
 
 
 @dataclass
@@ -63,7 +71,8 @@ class CriticalityMatrix:
     """
     Holds all weights (W). Some are freely adaptable, some are W0 —
     baseline invariants from the manifesto (BearerIntegrity, Truth-Priority,
-    CorrigibilityChannel) that the update loop may never silently overwrite.
+    CorrigibilityChannel) that no code path in this file may silently
+    overwrite.
     """
 
     def __init__(self) -> None:
@@ -91,8 +100,9 @@ class CriticalityMatrix:
         if w.is_immutable:
             raise ImmutableWeightViolation(
                 f"Refused to modify protected W0 invariant '{name}'. "
-                f"BearerIntegrity requires explicit human override, not an "
-                f"autonomous update."
+                f"Overriding a W0 invariant is out of scope for this "
+                f"approval loop and would require a separate, explicitly "
+                f"authenticated mechanism."
             )
         w.touch(new_value)
 
@@ -115,8 +125,7 @@ class CriticalityMatrix:
 class Model:
     """
     Minimal predictive model: an exponentially-weighted moving estimate
-    of the environment. Its adaptation speed is itself a weight in W,
-    which is exactly what makes it subject to the U loop.
+    of the environment. Its adaptation speed is itself a weight in W.
     """
 
     def __init__(self, matrix: CriticalityMatrix) -> None:
@@ -130,6 +139,15 @@ class Model:
         alpha = self.matrix.get("adaptability")
         self.state = self.state + alpha * (actual - self.state)
 
+    def hard_reset(self, value: float) -> None:
+        """
+        The 'irreversible action' referenced throughout this file: discards
+        accumulated model history instantly instead of gradually adapting.
+        This is exactly the kind of action that should go through the
+        Bearer approval loop before executing.
+        """
+        self.state = value
+
 
 def compute_error(predicted: float, actual: float) -> float:
     """E: the delta between the model's prediction and objective feedback."""
@@ -137,35 +155,23 @@ def compute_error(predicted: float, actual: float) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Threshold strategies — the "Fixed vs Adaptive" comparison
+# Threshold strategies
 # ---------------------------------------------------------------------------
 
 class ThresholdStrategy(ABC):
-    """
-    Common interface: given the current error (and whatever internal state
-    the strategy wants to keep), decide whether it counts as critical.
-    UpdateLoop doesn't care which implementation it's talking to.
-    """
-
     name: str = "abstract"
 
     @abstractmethod
-    def is_critical(self, error: float) -> bool:
-        ...
+    def is_critical(self, error: float) -> bool: ...
 
     @abstractmethod
-    def observe(self, error: float) -> None:
-        """Let the strategy update its own internal state after each step."""
-        ...
+    def observe(self, error: float) -> None: ...
 
     @abstractmethod
-    def current_threshold(self) -> float:
-        ...
+    def current_threshold(self) -> float: ...
 
 
 class FixedThreshold(ThresholdStrategy):
-    """Simple, predictable, does not change. Easy to reason about and test."""
-
     name = "fixed"
 
     def __init__(self, threshold: float = 0.3) -> None:
@@ -175,21 +181,13 @@ class FixedThreshold(ThresholdStrategy):
         return abs(error) > self.threshold
 
     def observe(self, error: float) -> None:
-        pass  # fixed strategy learns nothing from history, by design
+        pass
 
     def current_threshold(self) -> float:
         return self.threshold
 
 
 class AdaptiveThreshold(ThresholdStrategy):
-    """
-    Threshold itself evolves via an exponential moving average (EMA) of
-    recent absolute error, scaled by a sensitivity factor. Closer to the
-    manifesto's language of a system that recalibrates based on its own
-    history rather than a fixed external rule — at the cost of being
-    harder to predict and to reason about in advance.
-    """
-
     name = "adaptive (EMA)"
 
     def __init__(self, sensitivity: float = 1.5, ema_alpha: float = 0.2,
@@ -213,62 +211,301 @@ class AdaptiveThreshold(ThresholdStrategy):
 
 
 # ---------------------------------------------------------------------------
-# U: Update loop
+# Bearer Protocol (Variant B) — BearerReport, SignatureRequest,
+# ReportGenerator, ApprovalChannel implementations, AuditLog
 # ---------------------------------------------------------------------------
 
-def request_bearer_approval(action: str, log: bool = True) -> bool:
-    """
-    Stub for the DCT / Bearer mechanism (issue #2/#3 territory).
-    In this MVP it just simulates a human-in-the-loop checkpoint —
-    it does not actually block execution, it only marks the moment
-    where a real implementation would.
-    """
-    if log:
-        print(f"    [DCT-stub] Irreversible action requested: '{action}'. "
-              f"Bearer approval would be required here.")
-    return True
+RiskLevel = str  # "low" | "medium" | "high" — kept as str for simplicity
 
+
+@dataclass
+class BearerReport:
+    report_id: str
+    timestamp: str
+    trigger: str
+    invariant_name: str
+    attempted_old_value: float
+    attempted_new_value: float
+    triggering_error: float
+    risk_level: RiskLevel
+    explanation: str
+    status: str = "pending"  # "pending" | "approved" | "denied" | "expired"
+
+
+@dataclass
+class SignatureRequest:
+    report: BearerReport
+    created_at: str
+    resolved_at: Optional[str] = None
+    resolution: Optional[str] = None       # "approved" | "denied"
+    resolver_note: Optional[str] = None
+
+
+class ReportGenerator:
+    """
+    Builds a BearerReport with a plain-language explanation. Deliberately
+    simple string templates for now — this is the 'structured justification
+    file' from the manifesto, scoped down to something buildable today.
+    """
+
+    @staticmethod
+    def generate(
+        trigger: str,
+        invariant_name: str,
+        old_value: float,
+        new_value: float,
+        triggering_error: float,
+        risk_level: RiskLevel,
+    ) -> BearerReport:
+        explanations = {
+            "low": (
+                f"Routine recalibration: error {triggering_error:.3f} crossed "
+                f"the active threshold. '{invariant_name}' adjusted from "
+                f"{old_value:.3f} to {new_value:.3f}. Auto-logged, no "
+                f"signature required."
+            ),
+            "medium": (
+                f"Large prediction error ({triggering_error:.3f}) suggests a "
+                f"regime shift in the environment. The system proposes an "
+                f"irreversible action ('{trigger}') that would discard "
+                f"accumulated model history rather than adapt gradually. "
+                f"This requires explicit Bearer approval before it executes."
+            ),
+            "high": (
+                f"Direct attempt to modify the protected invariant "
+                f"'{invariant_name}' (from {old_value:.3f} to "
+                f"{new_value:.3f}) was refused by CriticalityMatrix itself. "
+                f"No approval channel in this module can override a W0 "
+                f"invariant; this report exists purely for the audit trail."
+            ),
+        }
+        return BearerReport(
+            report_id=str(uuid.uuid4()),
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            trigger=trigger,
+            invariant_name=invariant_name,
+            attempted_old_value=old_value,
+            attempted_new_value=new_value,
+            triggering_error=triggering_error,
+            risk_level=risk_level,
+            explanation=explanations.get(risk_level, "Unclassified event."),
+        )
+
+
+class ApprovalChannel(ABC):
+    """
+    Common interface for anything that can resolve a SignatureRequest.
+    UpdateLoop doesn't care which implementation it's talking to.
+    """
+
+    @abstractmethod
+    def request_signature(self, report: BearerReport) -> SignatureRequest:
+        ...
+
+
+class ConsoleApprovalChannel(ApprovalChannel):
+    """
+    Real interactive channel for local development: prints the report and
+    blocks on input() until the Bearer types y/n. This is the channel to
+    use when you actually want to test the human-in-the-loop behavior.
+    """
+
+    def request_signature(self, report: BearerReport) -> SignatureRequest:
+        print("\n    " + "=" * 60)
+        print(f"    BEARER SIGNATURE REQUEST  [{report.risk_level.upper()}]")
+        print(f"    report_id : {report.report_id}")
+        print(f"    trigger   : {report.trigger}")
+        print(f"    invariant : {report.invariant_name}")
+        print(f"    old -> new: {report.attempted_old_value:.3f} -> "
+              f"{report.attempted_new_value:.3f}")
+        print(f"    reason    : {report.explanation}")
+        print("    " + "=" * 60)
+
+        decision = input("    Approve this action? [y/n]: ").strip().lower()
+        approved = decision == "y"
+        note = input("    Optional note (enter to skip): ").strip() or None
+
+        report.status = "approved" if approved else "denied"
+        return SignatureRequest(
+            report=report,
+            created_at=report.timestamp,
+            resolved_at=datetime.now(timezone.utc).isoformat(),
+            resolution=report.status,
+            resolver_note=note,
+        )
+
+
+class AutoApprovalChannel(ApprovalChannel):
+    """
+    Non-interactive channel for automated demos and reproducible testing.
+    NOT meant for real use — it makes a fixed decision without any actual
+    human review, which defeats the entire purpose of the Bearer protocol.
+    It exists only so the strategy-comparison run (Section: main) can
+    execute unattended, and it says so loudly every time it's used.
+    """
+
+    def __init__(self, always_approve: bool = True) -> None:
+        self.always_approve = always_approve
+
+    def request_signature(self, report: BearerReport) -> SignatureRequest:
+        decision = "approved" if self.always_approve else "denied"
+        report.status = decision
+        return SignatureRequest(
+            report=report,
+            created_at=report.timestamp,
+            resolved_at=datetime.now(timezone.utc).isoformat(),
+            resolution=decision,
+            resolver_note="[AutoApprovalChannel] simulated decision for "
+                           "automated testing — not a real Bearer review.",
+        )
+
+
+class AuditLog:
+    """
+    Append-only JSON Lines log. Every SignatureRequest is written here,
+    regardless of outcome. Entries are never edited or deleted — a reversed
+    decision is a new entry, not a rewritten old one.
+    """
+
+    def __init__(self, path: str | Path = "audit_log.jsonl") -> None:
+        self.path = Path(path)
+
+    def write(self, request: SignatureRequest) -> None:
+        record = {
+            "report": asdict(request.report),
+            "created_at": request.created_at,
+            "resolved_at": request.resolved_at,
+            "resolution": request.resolution,
+            "resolver_note": request.resolver_note,
+        }
+        with self.path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+# ---------------------------------------------------------------------------
+# U: Update loop, now wired into the Bearer protocol
+# ---------------------------------------------------------------------------
 
 class UpdateLoop:
     """
     U: reads the error signal, asks a ThresholdStrategy whether it's
-    critical, and if so recalibrates W — always respecting W0.
+    critical, and recalibrates W accordingly. High-impact actions are
+    routed through ReportGenerator + ApprovalChannel + AuditLog instead of
+    executing unconditionally.
     """
 
-    def __init__(self, matrix: CriticalityMatrix, strategy: ThresholdStrategy,
-                 verbose: bool = True) -> None:
+    SHOCK_MULTIPLIER = 3.0  # error > threshold * this => "medium" risk event
+
+    def __init__(
+        self,
+        matrix: CriticalityMatrix,
+        strategy: ThresholdStrategy,
+        model: Model,
+        approval_channel: ApprovalChannel,
+        audit_log: AuditLog,
+        verbose: bool = True,
+    ) -> None:
         self.matrix = matrix
         self.strategy = strategy
+        self.model = model
+        self.approval_channel = approval_channel
+        self.audit_log = audit_log
         self.verbose = verbose
+
         self.recalibration_count = 0
+        self.approved_resets = 0
+        self.denied_resets = 0
         self.error_history: List[float] = []
 
-    def step(self, error: float) -> None:
+    def step(self, error: float, actual: float) -> None:
         self.error_history.append(error)
-        critical = self.strategy.is_critical(error)
-        if critical:
-            self._recalibrate(error)
+        if self.strategy.is_critical(error):
+            self._recalibrate(error, actual)
         self.strategy.observe(error)
 
-    def _recalibrate(self, error: float) -> None:
+    def _recalibrate(self, error: float, actual: float) -> None:
         self.recalibration_count += 1
         threshold = self.strategy.current_threshold()
         old = self.matrix.get("adaptability")
         new = min(1.0, old + 0.1 * (abs(error) - threshold))
+
+        # --- LOW risk: ordinary recalibration, auto-logged, no signature ---
         self.matrix.update("adaptability", new)
+        low_report = ReportGenerator.generate(
+            trigger="threshold_recalibration",
+            invariant_name="adaptability",
+            old_value=old,
+            new_value=new,
+            triggering_error=error,
+            risk_level="low",
+        )
+        low_report.status = "auto-approved-low-risk"
+        self.audit_log.write(SignatureRequest(
+            report=low_report,
+            created_at=low_report.timestamp,
+            resolved_at=low_report.timestamp,
+            resolution="auto-approved-low-risk",
+            resolver_note=None,
+        ))
         if self.verbose:
             print(
                 f"    [U/{self.strategy.name}] |E|={abs(error):.3f} > "
-                f"threshold={threshold:.3f} -> adaptability {old:.3f} -> {new:.3f}"
+                f"threshold={threshold:.3f} -> adaptability {old:.3f} -> "
+                f"{new:.3f} (logged, no signature required)"
             )
 
-        if abs(error) > threshold * 3:
-            request_bearer_approval("reset_model_state", log=self.verbose)
-            try:
-                self.matrix.update("BearerIntegrity", 0.0)
-            except ImmutableWeightViolation as exc:
-                if self.verbose:
-                    print(f"    [W0 guard] {exc}")
+        # --- MEDIUM risk: proposed irreversible action, needs approval ---
+        if abs(error) > threshold * self.SHOCK_MULTIPLIER:
+            self._handle_irreversible_action(error, actual)
+
+    def _handle_irreversible_action(self, error: float, actual: float) -> None:
+        report = ReportGenerator.generate(
+            trigger="reset_model_state",
+            invariant_name="model.state",
+            old_value=self.model.state,
+            new_value=actual,
+            triggering_error=error,
+            risk_level="medium",
+        )
+        signature_request = self.approval_channel.request_signature(report)
+        self.audit_log.write(signature_request)
+
+        if signature_request.resolution == "approved":
+            self.approved_resets += 1
+            self.model.hard_reset(actual)
+            if self.verbose:
+                print(f"    [Bearer] APPROVED -> model.state hard-reset to "
+                      f"{actual:.3f}")
+        else:
+            self.denied_resets += 1
+            if self.verbose:
+                print(f"    [Bearer] DENIED -> model continues gradual "
+                      f"adaptation only")
+
+        # --- HIGH risk demonstration: direct attempt on a W0 invariant ---
+        # Included so the W0 guard itself always produces an audit trail
+        # too, not just a silently-caught exception.
+        high_report = ReportGenerator.generate(
+            trigger="direct_invariant_override_attempt",
+            invariant_name="BearerIntegrity",
+            old_value=self.matrix.get("BearerIntegrity"),
+            new_value=0.0,
+            triggering_error=error,
+            risk_level="high",
+        )
+        try:
+            self.matrix.update("BearerIntegrity", 0.0)
+        except ImmutableWeightViolation as exc:
+            high_report.status = "denied-by-system"
+            self.audit_log.write(SignatureRequest(
+                report=high_report,
+                created_at=high_report.timestamp,
+                resolved_at=datetime.now(timezone.utc).isoformat(),
+                resolution="denied-by-system",
+                resolver_note=str(exc),
+            ))
+            if self.verbose:
+                print(f"    [W0 guard] {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -276,12 +513,6 @@ class UpdateLoop:
 # ---------------------------------------------------------------------------
 
 def synthetic_environment(n: int = 50, seed: int = 42) -> Iterator[float]:
-    """
-    Slow drift + gaussian noise + one deliberate regime shock at t=25,
-    so both threshold strategies have something real to react to.
-    Deterministic (fixed seed) so the two strategies are compared on
-    exactly the same environment.
-    """
     rng = random.Random(seed)
     value = 0.0
     for t in range(n):
@@ -296,7 +527,12 @@ def synthetic_environment(n: int = 50, seed: int = 42) -> Iterator[float]:
 # Running one strategy end-to-end
 # ---------------------------------------------------------------------------
 
-def run_with_strategy(strategy: ThresholdStrategy, verbose: bool = True) -> dict:
+def run_with_strategy(
+    strategy: ThresholdStrategy,
+    approval_channel: ApprovalChannel,
+    audit_log_path: str = "audit_log.jsonl",
+    verbose: bool = True,
+) -> dict:
     matrix = CriticalityMatrix()
     matrix.register("adaptability", value=0.1)
     matrix.register("BearerIntegrity", value=1.0, is_immutable=True)
@@ -304,12 +540,15 @@ def run_with_strategy(strategy: ThresholdStrategy, verbose: bool = True) -> dict
     matrix.register("CorrigibilityChannel", value=1.0, is_immutable=True)
 
     model = Model(matrix)
-    loop = UpdateLoop(matrix, strategy, verbose=verbose)
+    audit_log = AuditLog(audit_log_path)
+    loop = UpdateLoop(matrix, strategy, model, approval_channel, audit_log,
+                       verbose=verbose)
 
     adaptability_at_shock_plus_5 = None
 
     if verbose:
-        print(f"\n=== Strategy: {strategy.name} ===\n")
+        print(f"\n=== Strategy: {strategy.name}  "
+              f"(approval channel: {type(approval_channel).__name__}) ===\n")
 
     for t, actual in enumerate(synthetic_environment()):
         predicted = model.predict()
@@ -317,10 +556,10 @@ def run_with_strategy(strategy: ThresholdStrategy, verbose: bool = True) -> dict
         if verbose:
             print(f"t={t:02d}  predicted={predicted:7.3f}  actual={actual:7.3f}  "
                   f"E={error:7.3f}  threshold={strategy.current_threshold():.3f}")
-        loop.step(error)
+        loop.step(error, actual)
         model.observe(actual)
 
-        if t == 30:  # 5 steps after the shock at t=25
+        if t == 30:
             adaptability_at_shock_plus_5 = matrix.get("adaptability")
 
     final_snapshot = matrix.snapshot()
@@ -330,45 +569,76 @@ def run_with_strategy(strategy: ThresholdStrategy, verbose: bool = True) -> dict
         for name, snap in final_snapshot.items():
             print(f"  {name:22s} value={snap['value']:.4f}  "
                   f"baseline={snap['baseline']}  immutable={snap['is_immutable']}")
+        print(f"--- Bearer protocol: {loop.approved_resets} approved, "
+              f"{loop.denied_resets} denied irreversible action(s) ---")
 
     return {
         "strategy": strategy.name,
         "recalibrations": loop.recalibration_count,
+        "approved_resets": loop.approved_resets,
+        "denied_resets": loop.denied_resets,
         "final_adaptability": final_snapshot["adaptability"]["value"],
         "adaptability_5_steps_after_shock": adaptability_at_shock_plus_5,
     }
 
 
 # ---------------------------------------------------------------------------
-# Main: run both strategies, compare
+# Main
 # ---------------------------------------------------------------------------
 
 def run_simulation() -> None:
-    print("=== Core Engine: S = (M, E, W, U) simulation ===")
-    print("Comparing FixedThreshold vs AdaptiveThreshold (EMA) on the same environment.\n")
+    print("=== Core Engine + Bearer Protocol (Variant B) ===\n")
 
-    fixed_result = run_with_strategy(FixedThreshold(threshold=0.3))
-    adaptive_result = run_with_strategy(AdaptiveThreshold())
+    # --- Part 1: unattended comparison run, same as before, using
+    #     AutoApprovalChannel so it can run without blocking on input().
+    #     This reproduces the Fixed-vs-Adaptive comparison from Issue #1
+    #     unchanged; Bearer events are still generated and audited, just
+    #     not interactively reviewed here.
+    print(">>> Part 1: Fixed vs Adaptive comparison (auto-approval, for CI/demo)\n")
+    fixed_result = run_with_strategy(
+        FixedThreshold(threshold=0.3),
+        AutoApprovalChannel(always_approve=True),
+        audit_log_path="audit_log.jsonl",
+    )
+    adaptive_result = run_with_strategy(
+        AdaptiveThreshold(),
+        AutoApprovalChannel(always_approve=True),
+        audit_log_path="audit_log.jsonl",
+    )
 
     print("\n=== Comparison ===")
-    header = f"{'strategy':16s} {'recalibrations':>15s} {'adapt. +5 steps':>18s} {'final adapt.':>14s}"
+    header = (f"{'strategy':16s} {'recalibr.':>10s} {'approved':>9s} "
+              f"{'denied':>7s} {'adapt. +5 steps':>16s} {'final adapt.':>13s}")
     print(header)
     print("-" * len(header))
     for r in (fixed_result, adaptive_result):
-        print(f"{r['strategy']:16s} {r['recalibrations']:>15d} "
-              f"{r['adaptability_5_steps_after_shock']:>18.4f} "
-              f"{r['final_adaptability']:>14.4f}")
+        print(f"{r['strategy']:16s} {r['recalibrations']:>10d} "
+              f"{r['approved_resets']:>9d} {r['denied_resets']:>7d} "
+              f"{r['adaptability_5_steps_after_shock']:>16.4f} "
+              f"{r['final_adaptability']:>13.4f}")
 
     print(
-        "\nReading this: FixedThreshold reacts to any error above a constant "
-        "line, regardless of context — predictable, but blind to whether the "
-        "environment has generally become noisier. AdaptiveThreshold raises "
-        "its own bar after a shock (because recent error is now higher on "
-        "average), which can mean fewer recalibrations right after a big "
-        "surprise, but is harder to predict in advance and depends on tuning "
-        "(sensitivity, EMA alpha) that isn't obviously 'correct'. Neither is "
-        "strictly better — that trade-off is the point of showing both."
+        "\nNote: with AutoApprovalChannel(always_approve=True), every "
+        "medium-risk reset is approved, so these numbers match the "
+        "pre-Bearer-protocol version of this file. Try Part 2 below for the "
+        "actual interactive approval flow."
     )
+
+    # --- Part 2: interactive demonstration of the real Bearer flow ---
+    print("\n" + "=" * 70)
+    print(">>> Part 2: interactive Bearer approval demo (ConsoleApprovalChannel)")
+    print("    You will be prompted to approve/deny the irreversible action")
+    print("    triggered by the shock at t=25. Try answering both y and n")
+    print("    on different runs to see the difference in model.state.")
+    print("=" * 70)
+
+    run_with_strategy(
+        FixedThreshold(threshold=0.3),
+        ConsoleApprovalChannel(),
+        audit_log_path="audit_log.jsonl",
+    )
+
+    print(f"\nFull audit trail written to: {Path('audit_log.jsonl').resolve()}")
 
 
 if __name__ == "__main__":
