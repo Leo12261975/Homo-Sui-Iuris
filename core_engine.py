@@ -836,12 +836,27 @@ class UpdateLoop:
         else:
             self.denied_resets += 1
             if self.verbose:
-                print(f"    [Bearer] DENIED -> model continues gradual "
-                      f"adaptation only")
+                print(f"    [Bearer] DENIED -> model reset refused by operator.")
+            
+            # --- Enforcement of TruthPriority Invariant ---
+            try:
+                truth_priority = self.matrix.get("TruthPriority")
+            except KeyError:
+                truth_priority = 0.0
+
+            if truth_priority >= 1.0:
+                if self.verbose:
+                    print("    [TruthPriority guard] Active! Rolling back automatic adaptation to prevent reality distortion.")
+                # Находим старое значение до recalibrate и жестко откатываем его назад,
+                # запрещая системе скрывать дрифт данных за счет адаптивности.
+                old_adaptability = self.matrix.get("adaptability")
+                # Откатываем шаг на 0.1 * (abs(error) - self.strategy.current_threshold())
+                # Для простоты и надежности возвращаем к исходному безопасному значению, 
+                # либо блокируем дальнейшие автоматические апдейты:
+                rollback_value = max(0.0, old_adaptability - 0.1 * (abs(error) - self.strategy.current_threshold()))
+                self.matrix.update("adaptability", rollback_value, source="truth_priority_rollback")
 
         # --- HIGH risk demonstration: direct attempt on a W0 invariant ---
-        # Included so the W0 guard itself always produces an audit trail
-        # too, not just a silently-caught exception.
         high_report = ReportGenerator.generate(
             trigger="direct_invariant_override_attempt",
             invariant_name="BearerIntegrity",
