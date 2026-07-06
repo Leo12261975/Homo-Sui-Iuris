@@ -1,0 +1,273 @@
+diff --git a/core_engine.py b/core_engine.py
+index 51a51c9..5cb7aa2 100644
+--- a/core_engine.py
++++ b/core_engine.py
+@@ -39,7 +39,7 @@ import random
+ import uuid
+ from abc import ABC, abstractmethod
+ from collections import deque
+-from dataclasses import dataclass, field, asdict
++from dataclasses import dataclass, asdict
+ from datetime import datetime, timezone
+ from pathlib import Path
+ from typing import Callable, Deque, Dict, Iterator, List, Optional
+@@ -67,19 +67,73 @@ class HistoryEntry:
+     source: str  # e.g. "update_loop", "direct", "unknown"
+ 
+ 
+-@dataclass
+ class Weight:
+-    name: str
+-    value: float
+-    baseline: float
+-    is_immutable: bool = False
+-    last_updated: str = field(
+-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+-    )
+-    history: Deque[HistoryEntry] = field(
+-        default_factory=lambda: deque(maxlen=20)
++    """
++    A single entry in the CriticalityMatrix.
++
++    `name`, `baseline`, and `is_immutable` are write-once: they are set in
++    __init__ and can never be reassigned afterwards, even by code holding a
++    direct reference to this object (e.g. via CriticalityMatrix.get_weight()).
++    This closes the gap DeepSeek's audit flagged: previously Weight was a
++    plain @dataclass, so `some_weight.is_immutable = False` was an ordinary
++    attribute write that silently stripped W0 protection without going
++    through CriticalityMatrix.update() at all.
++
++    `value`, `last_updated`, and `history` remain mutable — they change
++    legitimately through touch(), which is the only method allowed to
++    write them.
++    """
++
++    __slots__ = ("_name", "_baseline", "_is_immutable", "value", "last_updated", "history")
++
++    def __init__(
++        self,
++        name: str,
++        value: float,
++        baseline: float,
++        is_immutable: bool = False,
++        last_updated: str | None = None,
++        history: Deque[HistoryEntry] | None = None,
++    ) -> None:
++        object.__setattr__(self, "_name", name)
++        object.__setattr__(self, "_baseline", baseline)
++        object.__setattr__(self, "_is_immutable", is_immutable)
++        object.__setattr__(self, "value", value)
++        object.__setattr__(
++            self, "last_updated",
++            last_updated or datetime.now(timezone.utc).isoformat(),
++        )
++        object.__setattr__(self, "history", history if history is not None else deque(maxlen=20))
++
++    _PROTECTED_ATTRS = (
++        "_name", "name",
++        "_baseline", "baseline",
++        "_is_immutable", "is_immutable",
+     )
+ 
++    def __setattr__(self, key: str, val) -> None:
++        if key in self._PROTECTED_ATTRS:
++            raise ImmutableWeightViolation(
++                f"'{key}' on Weight('{getattr(self, '_name', '?')}') is "
++                f"write-once and was already set at construction time. "
++                f"There is no supported code path for changing a weight's "
++                f"name, baseline, or immutability after registration — "
++                f"including via the public property name."
++            )
++        object.__setattr__(self, key, val)
++
++    @property
++    def name(self) -> str:
++        return self._name
++
++    @property
++    def baseline(self) -> float:
++        return self._baseline
++
++    @property
++    def is_immutable(self) -> bool:
++        return self._is_immutable
++
+     def touch(self, new_value: float, source: str = "unknown") -> None:
+         timestamp = datetime.now(timezone.utc).isoformat()
+         self.history.append(HistoryEntry(
+@@ -92,16 +146,89 @@ class Weight:
+         self.last_updated = timestamp
+ 
+ 
++# Canonical W0 invariants from the manifesto. Defined exactly once, at
++# module scope, as a frozenset — there is no setter for this anywhere in
++# the codebase. This is deliberately redundant with Weight.is_immutable:
++# see W0Guard below for why the redundancy is the point.
++W0_INVARIANT_NAMES: frozenset[str] = frozenset({
++    "BearerIntegrity",
++    "TruthPriority",
++    "CorrigibilityChannel",
++})
++
++
++class W0Guard:
++    """
++    Second, independent check for W0 protection — deliberately not derived
++    from Weight.is_immutable.
++
++    The single-flag design (CriticalityMatrix.update() trusting only
++    weight.is_immutable) has a structural weakness even after Weight
++    itself is hardened: anyone constructing or registering a *new* Weight
++    under a W0 name (e.g. matrix.register("BearerIntegrity", value=1.0))
++    without passing is_immutable=True would silently create an unprotected
++    weight sharing a canonical invariant's name, and nothing would object.
++
++    W0Guard closes that gap by checking the name itself against a
++    hardcoded registry, independent of whatever flag was set on the
++    object. CriticalityMatrix.update() and .register() must both pass
++    before a write proceeds. An attacker (or a bug) has to defeat both
++    checks, not just one.
++    """
++
++    def __init__(self, protected_names: frozenset[str] = W0_INVARIANT_NAMES) -> None:
++        self._protected_names = protected_names
++
++    @property
++    def protected_names(self) -> frozenset[str]:
++        return self._protected_names
++
++    def is_protected(self, name: str) -> bool:
++        return name in self._protected_names
++
++    def enforce_write(self, name: str, weight: "Weight") -> None:
++        """Called by CriticalityMatrix.update() before every write."""
++        by_registry = self.is_protected(name)
++        by_flag = weight.is_immutable
++        if by_registry or by_flag:
++            raise ImmutableWeightViolation(
++                f"Refused to modify protected W0 invariant '{name}' "
++                f"(blocked by canonical registry: {by_registry}, by "
++                f"Weight.is_immutable flag: {by_flag}). Overriding a W0 "
++                f"invariant is out of scope for this approval loop and "
++                f"would require a separate, explicitly authenticated "
++                f"mechanism."
++            )
++
++    def enforce_registration(self, name: str, is_immutable: bool) -> None:
++        """
++        Called by CriticalityMatrix.register() before creating a new
++        Weight. A canonical W0 name must always be registered as
++        immutable — silently registering "BearerIntegrity" as a mutable
++        weight (e.g. by a typo dropping is_immutable=True) is exactly the
++        kind of desync this guard exists to prevent.
++        """
++        if self.is_protected(name) and not is_immutable:
++            raise ImmutableWeightViolation(
++                f"'{name}' is a canonical W0 invariant (see "
++                f"W0_INVARIANT_NAMES) and must be registered with "
++                f"is_immutable=True."
++            )
++
++
+ class CriticalityMatrix:
+     """
+     Holds all weights (W). Some are freely adaptable, some are W0 —
+-    baseline invariants from the manifesto (BearerIntegrity, Truth-Priority,
++    baseline invariants from the manifesto (BearerIntegrity, TruthPriority,
+     CorrigibilityChannel) that no code path in this file may silently
+-    overwrite.
++    overwrite. Protection is enforced twice, independently: once on the
++    Weight object itself (write-once is_immutable), and once here via
++    W0Guard checking the name against a hardcoded registry.
+     """
+ 
+-    def __init__(self) -> None:
++    def __init__(self, guard: W0Guard | None = None) -> None:
+         self._weights: Dict[str, Weight] = {}
++        self._guard = guard if guard is not None else W0Guard()
+ 
+     def register(
+         self,
+@@ -110,6 +237,7 @@ class CriticalityMatrix:
+         baseline: float | None = None,
+         is_immutable: bool = False,
+     ) -> None:
++        self._guard.enforce_registration(name, is_immutable)
+         self._weights[name] = Weight(
+             name=name,
+             value=value,
+@@ -130,13 +258,7 @@ class CriticalityMatrix:
+         writes should look suspicious, not neutral.
+         """
+         w = self._weights[name]
+-        if w.is_immutable:
+-            raise ImmutableWeightViolation(
+-                f"Refused to modify protected W0 invariant '{name}'. "
+-                f"Overriding a W0 invariant is out of scope for this "
+-                f"approval loop and would require a separate, explicitly "
+-                f"authenticated mechanism."
+-            )
++        self._guard.enforce_write(name, w)
+         w.touch(new_value, source=source)
+ 
+     def get_weight(self, name: str) -> Weight:
+diff --git a/erythrocyte.py b/erythrocyte.py
+index ae180ca..ea7ec70 100644
+--- a/erythrocyte.py
++++ b/erythrocyte.py
+@@ -29,13 +29,33 @@ def calculate_variance(values: List[float]) -> float:
+     mean = sum(values) / len(values)
+     return sum((x - mean) ** 2 for x in values) / (len(values) - 1)
+ 
+-def scan_matrix(matrix: CriticalityMatrix, min_samples: int = 5) -> List[Dict[str, Any]]:
++# Fallback used for any weight that doesn't have an explicit entry in
++# variance_thresholds. Kept as a module-level default rather than buried
++# in the function signature so callers building their own threshold maps
++# have one obvious place to look up what "unconfigured" means.
++DEFAULT_VARIANCE_THRESHOLD = 0.05
++
++
++def scan_matrix(
++    matrix: CriticalityMatrix,
++    min_samples: int = 5,
++    variance_thresholds: Dict[str, float] | None = None,
++    default_variance_threshold: float = DEFAULT_VARIANCE_THRESHOLD,
++) -> List[Dict[str, Any]]:
+     """
+     Scans the entire CriticalityMatrix for signatures of external weight poisoning.
+     Returns a list of detected anomalies matching Section 3 of the spec.
++
++    `variance_thresholds` lets callers set a per-weight variance cutoff for
++    the static/oscillating classification, e.g.
++    {"adaptability": 0.10, "BearerIntegrity": 0.01}. Different weights have
++    different natural volatility — a fast-adapting model parameter and a
++    near-constant W0 invariant shouldn't share one hardcoded number. Any
++    weight not present in the map falls back to `default_variance_threshold`.
+     """
+     anomalies = []
+-    
++    thresholds = variance_thresholds or {}
++
+     for name in matrix.names():
+         weight = matrix.get_weight(name)
+         
+@@ -54,7 +74,8 @@ def scan_matrix(matrix: CriticalityMatrix, min_samples: int = 5) -> List[Dict[st
+         if is_poisoning_candidate:
+             # Classification logic based on variance thresholds (spec Section 3)
+             # High variance indicates unstable oscillation (dangerous class)
+-            if variance > 0.05:
++            threshold = thresholds.get(name, default_variance_threshold)
++            if variance > threshold:
+                 distortion_type = "oscillating"
+             else:
+                 distortion_type = "static"
+@@ -65,7 +86,8 @@ def scan_matrix(matrix: CriticalityMatrix, min_samples: int = 5) -> List[Dict[st
+                 "poisoning_candidate": True,
+                 "provenance_ratio": round(p_ratio, 3),
+                 "offset": round(offset, 4),
+-                "spread": round(math.sqrt(variance), 4)
++                "spread": round(math.sqrt(variance), 4),
++                "variance_threshold_used": threshold,
+             })
+             
+     return anomalies
