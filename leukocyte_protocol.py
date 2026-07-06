@@ -125,7 +125,7 @@ def run_network_demo() -> None:
         
         model = Model(matrix)
         audit_log = AuditLog(f"audit_log_{nid}.jsonl")
-        strategy = FixedThreshold(threshold=0.3)
+        strategy = FixedThreshold(threshold=0.01)
         
         # Instantiate local loop
         loop = UpdateLoop(

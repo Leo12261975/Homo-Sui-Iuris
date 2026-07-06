@@ -373,7 +373,7 @@ class ThresholdStrategy(ABC):
 class FixedThreshold(ThresholdStrategy):
     name = "fixed"
 
-    def __init__(self, threshold: float = 0.05) -> None:
+    def __init__(self, threshold: float = 0.3) -> None:
         self.threshold = threshold
 
     def is_critical(self, error: float) -> bool:
@@ -837,7 +837,7 @@ class UpdateLoop:
             self.denied_resets += 1
             if self.verbose:
                 print(f"    [Bearer] DENIED -> model reset refused by operator.")
-            
+
             # --- Enforcement of TruthPriority Invariant ---
             try:
                 truth_priority = self.matrix.get("TruthPriority")
@@ -851,7 +851,7 @@ class UpdateLoop:
                 # запрещая системе скрывать дрифт данных за счет адаптивности.
                 old_adaptability = self.matrix.get("adaptability")
                 # Откатываем шаг на 0.1 * (abs(error) - self.strategy.current_threshold())
-                # Для простоты и надежности возвращаем к исходному безопасному значению, 
+                # Для простоты и надежности возвращаем к исходному безопасному значению,
                 # либо блокируем дальнейшие автоматические апдейты:
                 rollback_value = max(0.0, old_adaptability - 0.1 * (abs(error) - self.strategy.current_threshold()))
                 self.matrix.update("adaptability", rollback_value, source="truth_priority_rollback")
@@ -968,10 +968,15 @@ def run_with_strategy(
 
 def run_simulation() -> None:
     print("=== Core Engine + Bearer Protocol (Variant B) ===\n")
-    print(">>> Part 1: Fixed vs Adaptive comparison (auto-approval, for CI/demo)\n")
 
+    # --- Part 1: unattended comparison run, same as before, using
+    #     AutoApprovalChannel so it can run without blocking on input().
+    #     This reproduces the Fixed-vs-Adaptive comparison from Issue #1
+    #     unchanged; Bearer events are still generated and audited, just
+    #     not interactively reviewed here.
+    print(">>> Part 1: Fixed vs Adaptive comparison (auto-approval, for CI/demo)\n")
     fixed_result = run_with_strategy(
-        FixedThreshold(threshold=0.05),
+        FixedThreshold(threshold=0.3),
         AutoApprovalChannel(always_approve=True),
         audit_log_path="audit_log.jsonl",
     )
@@ -992,16 +997,23 @@ def run_simulation() -> None:
               f"{r['adaptability_5_steps_after_shock']:>16.4f} "
               f"{r['final_adaptability']:>13.4f}")
 
-    print("\n" + "="*70)
+    print(
+        "\nNote: with AutoApprovalChannel(always_approve=True), every "
+        "medium-risk reset is approved, so these numbers match the "
+        "pre-Bearer-protocol version of this file. Try Part 2 below for the "
+        "actual interactive approval flow."
+    )
+
+    # --- Part 2: interactive demonstration of the real Bearer flow ---
+    print("\n" + "=" * 70)
     print(">>> Part 2: interactive Bearer approval demo (ConsoleApprovalChannel)")
     print("    You will be prompted to approve/deny the irreversible action")
     print("    triggered by the shock at t=25. Try answering both y and n")
     print("    on different runs to see the difference in model.state.")
-    print("="*70 + "\n")
+    print("=" * 70)
 
-    print("=== Strategy: fixed  (approval channel: ConsoleApprovalChannel) ===\n")
     run_with_strategy(
-        FixedThreshold(threshold=0.05),
+        FixedThreshold(threshold=0.3),
         ConsoleApprovalChannel(),
         audit_log_path="audit_log.jsonl",
     )
