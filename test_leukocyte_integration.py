@@ -84,14 +84,19 @@ def network(tmp_path):
 
         def network_escalation_closure(finding: dict, weight_obj: Weight, node_id=nid):
             loop.matrix.update(finding["weight"], weight_obj.baseline, source="erythrocyte_correction")
-            payload_sample = ADVERSARIAL_PAYLOAD
-            simulated_hash = hashlib.sha256(payload_sample.encode("utf-8")).hexdigest()
-            antigen = AntigenSignature(
-                target_weight=finding["weight"],
-                distortion_type=finding["distortion"],
-                signature_hash=simulated_hash,
-            )
-            net.broadcast_antigen(node_id, antigen)
+            # Mirrors the production fix in leukocyte_protocol.py: one
+            # antigen per distinct payload Erythrocyte actually observed
+            # (finding["observed_contexts"]), not a hash of a hardcoded
+            # placeholder string. See test_context_fingerprint_* below
+            # for the tests that specifically exercise this.
+            for ctx in finding.get("observed_contexts", []):
+                signature_hash = hashlib.sha256(ctx.encode("utf-8")).hexdigest()
+                antigen = AntigenSignature(
+                    target_weight=finding["weight"],
+                    distortion_type=finding["distortion"],
+                    signature_hash=signature_hash,
+                )
+                net.broadcast_antigen(node_id, antigen)
 
         loop._escalate_erythrocyte_finding = network_escalation_closure
 
@@ -122,7 +127,7 @@ class TestLeukocyteIntegration:
             node_a_loop.step(error=0.05, actual=0.1)
             injected_val = 0.9 if t % 2 == 0 else 0.1
             if not node_a_agent.should_block("adaptability", ADVERSARIAL_PAYLOAD):
-                node_a_loop.matrix.update("adaptability", injected_val, source="untraced_injection")
+                node_a_loop.matrix.update("adaptability", injected_val, source="untraced_injection", context=ADVERSARIAL_PAYLOAD)
 
         # Erythrocyte must have actually classified this as oscillating
         # and escalated it. Note: erythrocyte_oscillating_flags is NOT a
@@ -158,7 +163,7 @@ class TestLeukocyteIntegration:
         for t in range(5):
             node_b_loop.step(error=0.02, actual=0.05)
             if not node_b_agent.should_block("adaptability", ADVERSARIAL_PAYLOAD):
-                node_b_loop.matrix.update("adaptability", 0.9, source="untraced_injection")
+                node_b_loop.matrix.update("adaptability", 0.9, source="untraced_injection", context=ADVERSARIAL_PAYLOAD)
 
         # The core regression assertion: the attack must have actually
         # been blocked somewhere, not merely logged or ignored.
@@ -184,6 +189,66 @@ class TestLeukocyteIntegration:
         assert node_a_agent.blocked_attacks_count == 0
         assert node_a_agent.should_block("adaptability", ADVERSARIAL_PAYLOAD) is False
         assert node_a_agent.blocked_attacks_count == 0
+
+    def test_escalation_without_context_broadcasts_no_antigen(self, network):
+        """
+        Honest-degrade check, and the direct regression test for the
+        context-threading fix: if whatever writes to a weight never
+        passes context=, Erythrocyte still detects the oscillating
+        distortion (that part doesn't depend on context at all), but no
+        antigen gets fabricated from a placeholder. Before this fix,
+        run_network_demo() would have broadcast a hash of a hardcoded
+        string here regardless — a fake signature that looked like real
+        coverage but would never generalize past the demo's own script.
+        """
+        net, node_ids = network
+        node_a_loop = net.nodes["Node_A"]["loop"]
+        node_a_agent = net.nodes["Node_A"]["agent"]
+
+        for t in range(8):
+            node_a_loop.step(error=0.05, actual=0.1)
+            injected_val = 0.9 if t % 2 == 0 else 0.1
+            # Deliberately NOT passing context= here.
+            node_a_loop.matrix.update("adaptability", injected_val, source="untraced_injection")
+
+        assert node_a_agent.antigen_blacklist == {}, (
+            "An antigen was broadcast even though no real payload context "
+            "was ever recorded for this weight's history — this means a "
+            "placeholder or empty-string fingerprint got fabricated, "
+            "exactly the illusion this fix exists to eliminate."
+        )
+        assert node_a_agent.blocked_attacks_count == 0
+
+    def test_multiple_distinct_payloads_each_get_their_own_antigen(self, network):
+        """
+        If two DIFFERENT malicious payloads both target the same weight
+        within the same detection window, each must produce its own
+        antigen — a single combined hash of both would never match
+        should_block()'s per-payload hash for either individual future
+        attempt. This is what motivated broadcasting one antigen per
+        observed_contexts entry instead of one antigen for the whole
+        finding.
+        """
+        net, node_ids = network
+        node_a_loop = net.nodes["Node_A"]["loop"]
+        node_a_agent = net.nodes["Node_A"]["agent"]
+
+        payload_x = "attack_pattern_x"
+        payload_y = "attack_pattern_y"
+
+        for t in range(8):
+            node_a_loop.step(error=0.05, actual=0.1)
+            injected_val = 0.9 if t % 2 == 0 else 0.1
+            ctx = payload_x if t % 2 == 0 else payload_y
+            node_a_loop.matrix.update("adaptability", injected_val, source="untraced_injection", context=ctx)
+
+        assert len(node_a_agent.antigen_blacklist) >= 2, (
+            "Two distinct observed payloads should have produced at "
+            "least two distinct blacklist entries, not one combined "
+            "(and therefore unmatchable) fingerprint."
+        )
+        assert node_a_agent.should_block("adaptability", payload_x) is True
+        assert node_a_agent.should_block("adaptability", payload_y) is True
 
     def test_should_block_does_not_match_on_wrong_target_weight(self, network):
         """
