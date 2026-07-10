@@ -90,10 +90,14 @@ class Weight:
        is_immutable is True.
 
     `value` (via `touch()`) and `last_updated`/`history` remain mutable
-    for non-immutable weights, and even for immutable ones the *only*
-    legitimate path is touch() using object.__setattr__ to bypass this
-    guard — which is exactly why CriticalityMatrix.update() still checks
-    is_immutable itself before ever calling touch().
+    for non-immutable weights. For immutable ones, `touch()` itself now
+    also checks `is_immutable` before writing anything (closing the gap
+    where a caller holding a direct Weight reference from
+    `matrix.get_weight()` could call `.touch()` and bypass
+    `CriticalityMatrix.update()`'s guard entirely). This is deliberately
+    redundant with `CriticalityMatrix.update()`'s own `is_immutable`
+    check — the two guards are independent by design, not because one
+    supersedes the other.
     """
 
     __slots__ = (
@@ -171,6 +175,16 @@ class Weight:
         return self._value
 
     def touch(self, new_value: float, source: str = "unknown") -> None:
+        if self._is_immutable and new_value != self._value:
+            raise ImmutableWeightViolation(
+                f"touch() refused on Weight('{self._name}'): this is a "
+                f"protected W0 invariant (is_immutable=True). There is no "
+                f"supported code path for changing its value after "
+                f"registration, including calling touch() directly on a "
+                f"fetched Weight reference — this check is independent of "
+                f"CriticalityMatrix.update()'s own guard, so a direct "
+                f"reference to the object no longer bypasses protection."
+            )
         timestamp = datetime.now(timezone.utc).isoformat()
         self.history.append(HistoryEntry(
             timestamp=timestamp,
