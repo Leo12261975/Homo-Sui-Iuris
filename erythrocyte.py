@@ -29,6 +29,30 @@ def calculate_variance(values: List[float]) -> float:
     mean = sum(values) / len(values)
     return sum((x - mean) ** 2 for x in values) / (len(values) - 1)
 
+def collect_observed_contexts(weight: Weight) -> List[str]:
+    """
+    Real fingerprint material for a finding: the distinct, non-empty
+    `context` values attached to this weight's UNTRACED history entries
+    (i.e. everything except the system's own legitimate writes).
+
+    This is what makes an antigen signature reflect what was actually
+    observed, instead of a hardcoded placeholder — Leukocyte hashes
+    these (not Erythrocyte's job; detection and fingerprinting are kept
+    separate here) to build a blacklist-matchable signature.
+
+    Legitimate writes are excluded on purpose: hashing "update_loop" or
+    "erythrocyte_correction" contexts into an antigen would fingerprint
+    the system's own behavior as if it were the attack.
+    """
+    contexts = {
+        entry.context
+        for entry in weight.history
+        if entry.source not in ("update_loop", "erythrocyte_correction")
+        and entry.context
+    }
+    return sorted(contexts)
+
+
 def scan_matrix(matrix: CriticalityMatrix, min_samples: int = 5) -> List[Dict[str, Any]]:
     """
     Scans the entire CriticalityMatrix for signatures of external weight poisoning.
@@ -71,6 +95,7 @@ def scan_matrix(matrix: CriticalityMatrix, min_samples: int = 5) -> List[Dict[st
                 "offset": round(offset, 4),
                 "spread": round(math.sqrt(variance), 4),
                 "variance_threshold_used": weight.variance_threshold,
+                "observed_contexts": collect_observed_contexts(weight),
             })
             
     return anomalies

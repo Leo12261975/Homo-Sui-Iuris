@@ -47,7 +47,7 @@ class AntigenSignature:
     """
     target_weight: str
     distortion_type: str  # "static" | "oscillating"
-    signature_hash: str   # Simulated payload signature (e.g., hash of adversarial prompt context)
+    signature_hash: str   # sha256 of a real observed payload (erythrocyte.collect_observed_contexts)
     timestamp: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -144,19 +144,33 @@ def run_network_demo() -> None:
         # Override the loop's internal escalation mechanism to fire into the P2P network!
         # This weaves the Erythrocyte escalation directly into the Leukocyte transport layer.
         def network_escalation_closure(finding: dict, weight_obj: Weight, node_id=nid):
-            # 1. Fallback to standard baseline correction
+            # 1. Baseline correction happens regardless of whether we
+            # have anything real to fingerprint.
             loop.matrix.update(finding["weight"], weight_obj.baseline, source="erythrocyte_correction")
-            # 2. Fabricate the network Antigen Signature
-            payload_sample = "adversarial_prompt_injection_vector_v1"
-            simulated_hash = hashlib.sha256(payload_sample.encode('utf-8')).hexdigest()
-            
-            antigen = AntigenSignature(
-                target_weight=finding["weight"],
-                distortion_type=finding["distortion"],
-                signature_hash=simulated_hash
-            )
-            # 3. Propagate globally
-            network.broadcast_antigen(node_id, antigen)
+
+            # 2. Build one Antigen per distinct payload Erythrocyte
+            # actually observed for this weight (finding["observed_contexts"]
+            # -- see erythrocyte.collect_observed_contexts). This is a
+            # deliberate change from hashing one hardcoded placeholder
+            # string: a single combined hash of multiple distinct
+            # payloads would never match should_block()'s per-payload
+            # hash for any individual future attempt, so each real
+            # payload gets its own blacklist entry instead.
+            observed_contexts = finding.get("observed_contexts", [])
+            if not observed_contexts:
+                print(f"    [WARNING @ {node_id}] Escalation on '{finding['weight']}' has no "
+                      f"observed_contexts -- corrected locally, but broadcasting NO antigen "
+                      f"(nothing real to fingerprint).")
+                return
+            for ctx in observed_contexts:
+                signature_hash = hashlib.sha256(ctx.encode('utf-8')).hexdigest()
+                antigen = AntigenSignature(
+                    target_weight=finding["weight"],
+                    distortion_type=finding["distortion"],
+                    signature_hash=signature_hash,
+                )
+                # 3. Propagate globally
+                network.broadcast_antigen(node_id, antigen)
             
         loop._escalate_erythrocyte_finding = network_escalation_closure
 
@@ -178,11 +192,11 @@ def run_network_demo() -> None:
             # Force oscillation between 0.9 and 0.1
             injected_val = 0.9 if t % 2 == 0 else 0.1
             if not node_a_agent.should_block("adaptability", adversarial_payload):
-                node_a_loop.matrix.update("adaptability", injected_val, source="untraced_injection")
+                node_a_loop.matrix.update("adaptability", injected_val, source="untraced_injection", context=adversarial_payload)
         else:
             # 8th injection attempt on Node_A
             if not node_a_agent.should_block("adaptability", adversarial_payload):
-                node_a_loop.matrix.update("adaptability", 0.9, source="untraced_injection")
+                node_a_loop.matrix.update("adaptability", 0.9, source="untraced_injection", context=adversarial_payload)
 
     # --- PHASE 2: Cross-Node Immunity Verification ---
     print("\n--- PHASE 2: Testing Cross-Node Vaccination (Attacking Node_B) ---")
@@ -194,7 +208,7 @@ def run_network_demo() -> None:
         node_b_loop.step(error=0.02, actual=0.05)
         # Leukocyte guard intercepts here before inner loop or matrix ever touches it
         if not node_b_agent.should_block("adaptability", adversarial_payload):
-            node_b_loop.matrix.update("adaptability", 0.9, source="untraced_injection")
+            node_b_loop.matrix.update("adaptability", 0.9, source="untraced_injection", context=adversarial_payload)
 
     print("\n=== FINAL COGNITIVE IMMUNITY REPORT ===")
     for nid in node_ids:

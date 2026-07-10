@@ -60,11 +60,20 @@ class HistoryEntry:
     provenance_ratio() reads: changes tagged "update_loop" came through the
     system's own recalibration logic (and therefore have a matching
     AuditLog entry); anything else is an untraced, direct write.
+
+    `context` is an opaque reference to whatever actually caused this
+    specific write — e.g. a hash or excerpt of the input that triggered
+    it. It is None for the system's own legitimate writes (there is no
+    adversarial input to reference). For untraced/direct writes, callers
+    SHOULD pass the real value that triggered the write, not a
+    placeholder — this is what lets Erythrocyte's finding carry a real
+    fingerprint downstream instead of a stand-in constant.
     """
     timestamp: str
     old_value: float
     new_value: float
     source: str  # e.g. "update_loop", "direct", "unknown"
+    context: str | None = None
 
 
 class Weight:
@@ -174,7 +183,7 @@ class Weight:
     def value(self) -> float:
         return self._value
 
-    def touch(self, new_value: float, source: str = "unknown") -> None:
+    def touch(self, new_value: float, source: str = "unknown", context: str | None = None) -> None:
         if self._is_immutable and new_value != self._value:
             raise ImmutableWeightViolation(
                 f"touch() refused on Weight('{self._name}'): this is a "
@@ -191,6 +200,7 @@ class Weight:
             old_value=self._value,
             new_value=new_value,
             source=source,
+            context=context,
         ))
         object.__setattr__(self, "_value", new_value)
         object.__setattr__(self, "last_updated", timestamp)
@@ -298,7 +308,7 @@ class CriticalityMatrix:
     def get(self, name: str) -> float:
         return self._weights[name].value
 
-    def update(self, name: str, new_value: float, source: str = "unknown") -> None:
+    def update(self, name: str, new_value: float, source: str = "unknown", context: str | None = None) -> None:
         """
         `source` identifies where this change came from. UpdateLoop tags its
         own calls as "update_loop" — Erythrocyte's provenance_ratio() uses
@@ -306,10 +316,17 @@ class CriticalityMatrix:
         writes. Callers outside UpdateLoop that don't pass `source` default
         to "unknown", which counts against provenance on purpose: untagged
         writes should look suspicious, not neutral.
+
+        `context`, if given, is an opaque reference to whatever real input
+        triggered this write (e.g. the actual payload a caller is about to
+        reject or accept). It flows through to Weight.history and from
+        there into Erythrocyte's findings — this is the mechanism that
+        lets an antigen signature be fingerprinted from real attack data
+        instead of a placeholder.
         """
         w = self._weights[name]
         self._guard.enforce_write(name, w)
-        w.touch(new_value, source=source)
+        w.touch(new_value, source=source, context=context)
 
     def get_weight(self, name: str) -> Weight:
         """Direct access to the Weight object — Erythrocyte needs this to
