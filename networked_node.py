@@ -14,6 +14,15 @@ Flow:
       broadcast_antigen over the network (async, fire-and-forget)
   antigen arrives over the network -> agent.register_antigen() locally
 
+Connection lifecycle: delegated entirely to NodeTransport.run_forever(),
+which owns reconnect + exponential backoff. This module no longer
+manages its own heartbeat/flush/listener tasks — it just supplies the
+on_antigen callback and lets the transport drive the session lifecycle.
+connect() still awaits the FIRST successful handshake (via
+transport.wait_connected()) so startup failures surface immediately,
+same as before; every reconnect after that happens silently in the
+background per the transport's backoff policy.
+
 KNOWN LIMITATION — this used to be carried over unchanged from
 run_network_demo() as a hardcoded placeholder hash. It no longer is:
 this module now builds antigen signatures from finding["observed_contexts"]
@@ -32,7 +41,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from core_engine import (
     ApprovalChannel,
@@ -44,9 +53,11 @@ from core_engine import (
     Weight,
 )
 from leukocyte_protocol import AntigenSignature, LeukocyteAgent
-from node_transport import NodeTransport
+from node_transport import AuthenticationError, NodeTransport
 
 log = logging.getLogger("networked_node")
+
+DEFAULT_CONNECT_TIMEOUT = 15.0  # seconds to wait for the FIRST handshake at startup
 
 
 class NetworkedLeukocyteNode:
@@ -70,6 +81,7 @@ class NetworkedLeukocyteNode:
         verbose: bool = False,
         log_flush_interval: float = 15.0,
         heartbeat_interval: float = 30.0,
+        connect_timeout: float = DEFAULT_CONNECT_TIMEOUT,
     ) -> None:
         self.node_id = node_id
         self.transport = NodeTransport(relay_url, node_id, token)
@@ -89,50 +101,72 @@ class NetworkedLeukocyteNode:
 
         self._log_flush_interval = log_flush_interval
         self._heartbeat_interval = heartbeat_interval
-        self._listener_task: Optional[asyncio.Task] = None
-        self._heartbeat_task: Optional[asyncio.Task] = None
-        self._log_flush_task: Optional[asyncio.Task] = None
+        self._connect_timeout = connect_timeout
+        self._run_forever_task: Optional[asyncio.Task] = None
 
     async def connect(self) -> None:
-        await self.transport.connect()
-        self._listener_task = asyncio.create_task(self._listen_for_network_antigens())
-        self._heartbeat_task = asyncio.create_task(self.transport.run_heartbeat(self._heartbeat_interval))
-        self._log_flush_task = asyncio.create_task(self._flush_logs_periodically())
+        """Starts the transport's run_forever() loop in the background
+        and waits for the first successful handshake. If the relay is
+        unreachable or the token is rejected right away, this raises —
+        same contract callers relied on before. Every reconnect after
+        this point is handled silently by the transport."""
+        self._run_forever_task = asyncio.create_task(
+            self.transport.run_forever(
+                on_antigen=self._on_network_antigen,
+                heartbeat_interval=self._heartbeat_interval,
+                flush_interval=self._log_flush_interval,
+            )
+        )
+        # Race "first handshake succeeded" against "run_forever gave up
+        # already" (e.g. AuthenticationError, which is not retried) —
+        # waiting on wait_connected() alone would sit for the full
+        # timeout even when the real answer is already known.
+        wait_connected_task = asyncio.create_task(self.transport.wait_connected())
+        done, _pending = await asyncio.wait(
+            {wait_connected_task, self._run_forever_task},
+            timeout=self._connect_timeout,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if wait_connected_task in done:
+            return  # handshake succeeded — run_forever_task keeps running in the background
+        wait_connected_task.cancel()
+        if self._run_forever_task in done:
+            self._run_forever_task.result()  # re-raises AuthenticationError (or whatever else)
+            return
+        # Neither finished within connect_timeout — first attempt is just slow/hanging.
+        self._run_forever_task.cancel()
+        raise ConnectionError(
+            f"[{self.node_id}] no successful handshake with relay within {self._connect_timeout}s"
+        )
 
     async def close(self) -> None:
-        for task in (self._listener_task, self._heartbeat_task, self._log_flush_task):
-            if task is not None:
-                task.cancel()
-        for task in (self._listener_task, self._heartbeat_task, self._log_flush_task):
-            if task is not None:
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
+        if self._run_forever_task is not None:
+            self._run_forever_task.cancel()
+            try:
+                await self._run_forever_task
+            except asyncio.CancelledError:
+                pass
+            except AuthenticationError:
+                pass  # already logged when it first happened
+        await self.transport.flush_logs()  # best-effort final flush
         await self.transport.close()
 
     # ------------------------------------------------------------------
     # Inbound: network antigen -> local agent
     # ------------------------------------------------------------------
-    async def _listen_for_network_antigens(self) -> None:
-        try:
-            async for payload in self.transport.incoming_antigens():
-                antigen = AntigenSignature(
-                    target_weight=payload.get("target_weight", ""),
-                    distortion_type=payload.get("distortion_type", ""),
-                    signature_hash=payload.get("signature_hash", ""),
-                )
-                self.agent.register_antigen(antigen)
-                self.transport.queue_log({
-                    "event": "antigen_received",
-                    "node_id": self.node_id,
-                    "target_weight": antigen.target_weight,
-                })
-                log.info("[%s] received antigen for '%s' over network", self.node_id, antigen.target_weight)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            log.exception("[%s] antigen listener crashed", self.node_id)
+    async def _on_network_antigen(self, payload: Dict[str, Any]) -> None:
+        antigen = AntigenSignature(
+            target_weight=payload.get("target_weight", ""),
+            distortion_type=payload.get("distortion_type", ""),
+            signature_hash=payload.get("signature_hash", ""),
+        )
+        self.agent.register_antigen(antigen)
+        self.transport.queue_log({
+            "event": "antigen_received",
+            "node_id": self.node_id,
+            "target_weight": antigen.target_weight,
+        })
+        log.info("[%s] received antigen for '%s' over network", self.node_id, antigen.target_weight)
 
     # ------------------------------------------------------------------
     # Outbound: local oscillating finding -> self-vaccinate + broadcast
@@ -173,7 +207,7 @@ class NetworkedLeukocyteNode:
             # broadcast_antigen()'s self-vaccination step. This does NOT
             # wait for the network round trip, so a node keeps
             # protecting itself even if the relay connection is briefly
-            # down.
+            # down (or mid-reconnect).
             self.agent.register_antigen(antigen)
             # Propagate to the network. Scheduled as a task because this
             # hook is invoked synchronously from inside UpdateLoop.step()
@@ -198,6 +232,11 @@ class NetworkedLeukocyteNode:
                 "signature_hash": antigen.signature_hash,
             })
         except Exception:
+            # If the relay connection is mid-reconnect, this antigen is
+            # simply lost — not queued/retried. Self-vaccination above
+            # already protects THIS node regardless; a lost broadcast
+            # only delays other nodes learning about it, and the next
+            # oscillation (if the attack repeats) will try again.
             log.exception("[%s] failed to broadcast antigen for '%s'", self.node_id, antigen.target_weight)
 
     # ------------------------------------------------------------------
@@ -215,13 +254,3 @@ class NetworkedLeukocyteNode:
 
     def step(self, error: float, actual: float) -> None:
         self.loop.step(error=error, actual=actual)
-
-    # ------------------------------------------------------------------
-    async def _flush_logs_periodically(self) -> None:
-        try:
-            while True:
-                await asyncio.sleep(self._log_flush_interval)
-                await self.transport.flush_logs()
-        except asyncio.CancelledError:
-            await self.transport.flush_logs()  # best-effort final flush on shutdown
-            raise
