@@ -58,6 +58,8 @@ from pathlib import Path
 from typing import Dict, Optional
 
 import websockets
+from websockets.datastructures import Headers
+from websockets.http11 import Response
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("relay")
@@ -203,6 +205,38 @@ class Relay:
         log.info("wrote %d log entries for %s", len(entries), sender_id)
 
 
+def _process_request(connection, request):
+    """
+    Intercepts plain (non-upgrade) GET requests -- e.g. a browser or
+    bot hitting https://relay.w0guard.net/ directly -- and answers with
+    a plain 200 instead of letting the handshake fail with a 500.
+
+    NOTE on what this can and cannot catch: `websockets`' HTTP/1.1
+    parser (Request.parse in http11.py) hardcodes acceptance of GET
+    only -- any other method (HEAD, POST, ...) is rejected while
+    parsing the request line, before a Request object even exists, so
+    process_request() is never invoked for those at all; there is no
+    hook in this library to intercept them gracefully. That rejection
+    is logged as "opening handshake failed" but does NOT crash the
+    relay process -- each connection is its own asyncio task, and the
+    exception is caught within that task. It's log noise, not an
+    outage. Filtering it out (e.g. rejecting non-GET methods at the
+    Caddy layer, before they ever reach this process) is a Caddyfile
+    change, not something fixable here.
+
+    Returning None means "not intercepted, proceed with the normal
+    WebSocket handshake" -- the path every real node_transport.py
+    connection takes (GET + Upgrade: websocket).
+    """
+    if request.headers.get("Upgrade", "").lower() != "websocket":
+        return Response(
+            200, "OK",
+            Headers({"Content-Type": "text/plain"}),
+            b"W0Guard relay: WebSocket endpoint only. Connect with a WebSocket client.\n",
+        )
+    return None
+
+
 async def serve(
     host: str = DEFAULT_HOST,
     port: int = 8765,
@@ -210,7 +244,9 @@ async def serve(
     log_dir: str = DEFAULT_LOG_DIR,
 ):
     relay = Relay(node_tokens if node_tokens is not None else NODE_TOKENS, log_dir=log_dir)
-    async with websockets.serve(relay.handle, host, port, max_size=MAX_MESSAGE_BYTES):
+    async with websockets.serve(
+        relay.handle, host, port, max_size=MAX_MESSAGE_BYTES, process_request=_process_request,
+    ):
         log.info("relay listening on %s:%d (expects Caddy in front for TLS)", host, port)
         await asyncio.Future()  # run forever
 
