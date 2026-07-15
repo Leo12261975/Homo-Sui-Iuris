@@ -14,8 +14,27 @@ else. The Leukocyte/Erythrocyte detection and blocking logic itself
 stays entirely local to each node — only the transport for
 broadcast_antigen() changes.
 
+Deployment topology (relay.w0guard.net):
+  internet --443/TLS--> Caddy (reverse proxy, cert via Let's Encrypt)
+      --127.0.0.1:8765/plain ws--> this process
+
+  This process itself NEVER speaks TLS and NEVER listens on a
+  publicly-routable interface. It binds 127.0.0.1 only — Caddy is the
+  only thing standing between it and the open internet. This is a
+  deliberate separation of concerns: TLS cert issuance/renewal is
+  Caddy's job (it does this automatically), so this file has zero
+  certificate-handling code to get wrong. See /etc/caddy/Caddyfile in
+  the ops docs for the proxy config.
+
+  Do NOT change `host` back to "0.0.0.0" without also reconsidering
+  this whole security model — that would make the relay directly
+  reachable from the internet, bypassing Caddy (and TLS) entirely,
+  even if Caddy is still separately configured. ufw should also have
+  no rule opening 8765 externally; loopback-only binding plus a closed
+  port is defense in depth, not either/or.
+
 Security notes (apply regardless of "friendly testnet" framing, because
-this process will be reachable from the real internet):
+this process will be reachable from the real internet, via Caddy):
   - Only json.loads() is ever used on network input. Never pickle/eval
     on anything that arrived over the wire.
   - node_id used to build a log file path comes ONLY from the
@@ -24,9 +43,9 @@ this process will be reachable from the real internet):
     arbitrary-file-write vector.
   - Message size is capped (MAX_MESSAGE_BYTES) to avoid one node
     exhausting server memory.
-  - Run this behind a TLS-terminating reverse proxy (Caddy or nginx) in
-    production — auth tokens must never travel in plaintext over the
-    open internet. This file speaks plain ws:// for local testing only.
+  - Auth tokens now travel over wss:// (TLS terminated by Caddy) end to
+    end from the client's perspective — the plain-ws hop only exists on
+    loopback, which never leaves the machine.
 """
 
 from __future__ import annotations
@@ -39,6 +58,8 @@ from pathlib import Path
 from typing import Dict, Optional
 
 import websockets
+from websockets.datastructures import Headers
+from websockets.http11 import Response
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("relay")
@@ -51,6 +72,7 @@ log = logging.getLogger("relay")
 # node_tokens argument.
 NODE_TOKENS: Dict[str, str] = {}
 
+DEFAULT_HOST = "127.0.0.1"  # loopback only — see module docstring
 DEFAULT_LOG_DIR = "relay_logs"
 DEFAULT_TOKENS_FILE = "node_tokens.json"
 MAX_MESSAGE_BYTES = 64 * 1024
@@ -183,15 +205,49 @@ class Relay:
         log.info("wrote %d log entries for %s", len(entries), sender_id)
 
 
+def _process_request(connection, request):
+    """
+    Intercepts plain (non-upgrade) GET requests -- e.g. a browser or
+    bot hitting https://relay.w0guard.net/ directly -- and answers with
+    a plain 200 instead of letting the handshake fail with a 500.
+
+    NOTE on what this can and cannot catch: `websockets`' HTTP/1.1
+    parser (Request.parse in http11.py) hardcodes acceptance of GET
+    only -- any other method (HEAD, POST, ...) is rejected while
+    parsing the request line, before a Request object even exists, so
+    process_request() is never invoked for those at all; there is no
+    hook in this library to intercept them gracefully. That rejection
+    is logged as "opening handshake failed" but does NOT crash the
+    relay process -- each connection is its own asyncio task, and the
+    exception is caught within that task. It's log noise, not an
+    outage. Filtering it out (e.g. rejecting non-GET methods at the
+    Caddy layer, before they ever reach this process) is a Caddyfile
+    change, not something fixable here.
+
+    Returning None means "not intercepted, proceed with the normal
+    WebSocket handshake" -- the path every real node_transport.py
+    connection takes (GET + Upgrade: websocket).
+    """
+    if request.headers.get("Upgrade", "").lower() != "websocket":
+        return Response(
+            200, "OK",
+            Headers({"Content-Type": "text/plain"}),
+            b"W0Guard relay: WebSocket endpoint only. Connect with a WebSocket client.\n",
+        )
+    return None
+
+
 async def serve(
-    host: str = "0.0.0.0",
+    host: str = DEFAULT_HOST,
     port: int = 8765,
     node_tokens: Optional[Dict[str, str]] = None,
     log_dir: str = DEFAULT_LOG_DIR,
 ):
     relay = Relay(node_tokens if node_tokens is not None else NODE_TOKENS, log_dir=log_dir)
-    async with websockets.serve(relay.handle, host, port, max_size=MAX_MESSAGE_BYTES):
-        log.info("relay listening on %s:%d", host, port)
+    async with websockets.serve(
+        relay.handle, host, port, max_size=MAX_MESSAGE_BYTES, process_request=_process_request,
+    ):
+        log.info("relay listening on %s:%d (expects Caddy in front for TLS)", host, port)
         await asyncio.Future()  # run forever
 
 
@@ -202,4 +258,6 @@ if __name__ == "__main__":
         log.error(str(e))
         sys.exit(1)
     log.info("loaded %d registered node token(s)", len(tokens))
+    # host defaults to 127.0.0.1 (DEFAULT_HOST) — Caddy is the only
+    # process that should ever see a connection from the outside.
     asyncio.run(serve(node_tokens=tokens))
