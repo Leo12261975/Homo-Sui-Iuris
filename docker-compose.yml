@@ -1,0 +1,21 @@
+services:
+  w0guard_node:
+    build: .
+    container_name: w0guard_node
+    # Interactive first-time setup (node ID / token prompt) and the
+    # attack/status/quit console both need a real TTY + stdin.
+    stdin_open: true
+    tty: true
+    # Persists node_config.json (so you're not asked for your token
+    # every restart) and the per-node audit log across
+    # `docker compose down` / container recreation. Everything else in
+    # the image is rebuilt fresh from source each time.
+    volumes:
+      - ./data:/app/data
+    working_dir: /app
+    # node_config.json is read/written relative to the working
+    # directory the process runs in -- point it at the mounted volume
+    # instead of the image root so it actually persists.
+    environment:
+      - W0GUARD_CONFIG_DIR=/app/data
+    restart: unless-stopped
