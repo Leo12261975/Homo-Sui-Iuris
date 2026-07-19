@@ -1,0 +1,119 @@
+---
+const links = [
+  { href: "#about", label: "About" },
+  { href: "#work", label: "Work" },
+  { href: "#involve", label: "Involve" },
+];
+const repo = "https://github.com/Leo12261975/Homo-Sui-Iuris";
+---
+
+<header class="nav" data-nav>
+  <div class="nav__inner container">
+    <a class="nav__brand" href="#top" aria-label="Homo Sui Iuris — home">
+      <span class="nav__mark" aria-hidden="true"></span>
+      <span class="nav__name">Homo Sui Iuris</span>
+    </a>
+
+    <nav class="nav__links" aria-label="Primary">
+      {links.map((l) => (
+        <a href={l.href}>{l.label}</a>
+      ))}
+      <a class="nav__gh" href={repo} target="_blank" rel="noopener noreferrer">
+        GitHub
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M7 17 17 7M17 7H8M17 7v9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </a>
+    </nav>
+  </div>
+</header>
+
+<style>
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: var(--z-nav);
+    transition: background var(--dur-med) var(--ease-out-quart),
+      border-color var(--dur-med) var(--ease-out-quart),
+      backdrop-filter var(--dur-med) var(--ease-out-quart);
+    border-bottom: 1px solid transparent;
+  }
+  .nav__inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    height: 4.25rem;
+  }
+
+  /* On the dark hero (default). */
+  .nav__brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-family: var(--font-display);
+    font-size: 1.02rem;
+    letter-spacing: 0.01em;
+    color: var(--cream-on-dark);
+  }
+  .nav__mark {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--gold);
+    box-shadow: 0 0 0 3px oklch(0.805 0.115 85 / 0.18);
+    flex: none;
+  }
+  .nav__links {
+    display: flex;
+    align-items: center;
+    gap: clamp(1rem, 2.4vw, 2rem);
+    font-size: var(--text-sm);
+  }
+  .nav__links a {
+    color: var(--muted-on-dark);
+    transition: color var(--dur-fast) var(--ease-out-quart);
+  }
+  .nav__links a:hover { color: var(--gold); }
+  .nav__gh {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--cream-on-dark) !important;
+  }
+  .nav__gh svg { transition: transform var(--dur-fast) var(--ease-out-quart); }
+  .nav__gh:hover svg { transform: translate(1px, -1px); }
+
+  /* Solid state — over the light body. */
+  .nav.is-solid {
+    background: oklch(0.973 0.005 92 / 0.85);
+    backdrop-filter: saturate(1.4) blur(12px);
+    border-bottom-color: var(--rule);
+  }
+  .nav.is-solid .nav__brand { color: var(--ink); }
+  .nav.is-solid .nav__links a { color: var(--ink-soft); }
+  .nav.is-solid .nav__links a:hover { color: var(--gold-ink); }
+  .nav.is-solid .nav__gh { color: var(--ink) !important; }
+  .nav.is-solid .nav__mark {
+    background: var(--gold-ink);
+    box-shadow: 0 0 0 3px oklch(0.505 0.108 66 / 0.14);
+  }
+
+  @media (max-width: 40rem) {
+    .nav__name { display: none; }
+    .nav__inner { height: 3.75rem; }
+  }
+</style>
+
+<script>
+  const nav = document.querySelector<HTMLElement>("[data-nav]");
+  if (nav) {
+    // Flip to the solid (light) treatment once the hero has scrolled past.
+    const onScroll = () => {
+      const threshold = Math.min(window.innerHeight * 0.72, 620);
+      nav.classList.toggle("is-solid", window.scrollY > threshold);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+  }
+</script>

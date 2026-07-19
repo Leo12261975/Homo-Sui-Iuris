@@ -1,0 +1,199 @@
+---
+const repo = "https://github.com/Leo12261975/Homo-Sui-Iuris";
+const setupGuide = "https://github.com/Leo12261975/Homo-Sui-Iuris#readme";
+const platforms = ["Windows", "Linux", "Docker"];
+---
+
+<section class="involve section" id="involve" aria-labelledby="involve-title">
+  <div class="involve__atmosphere" aria-hidden="true"></div>
+  <div class="container">
+    <header class="involve__head reveal">
+      <h2 class="involve__title" id="involve-title">Join the testnet.</h2>
+      <p class="involve__sub">
+        The protocol only earns trust by being run, broken, and fixed in the open.
+        Three ways in.
+      </p>
+    </header>
+
+    <div class="involve__grid">
+      <!-- Featured path -->
+      <article class="path path--feature reveal">
+        <h3 class="path__title">Run a node</h3>
+        <p class="path__body">
+          W0Guard is live and looking for testers across platforms. Real usage
+          surfaces real bugs — our last dry run found one we wouldn't have caught
+          any other way.
+        </p>
+        <ul class="path__platforms" aria-label="Supported platforms">
+          {platforms.map((p) => <li>{p}</li>)}
+        </ul>
+        <a class="btn btn--gold" href={setupGuide} target="_blank" rel="noopener noreferrer">
+          Read the setup guide
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </a>
+      </article>
+
+      <div class="path__stack">
+        <article class="path reveal" style="--reveal-delay: 90ms">
+          <h3 class="path__title">Contribute code</h3>
+          <p class="path__body">
+            Issues, PRs, and integration reports welcome — especially around
+            detection accuracy, reconnect handling, and cross-platform packaging.
+          </p>
+          <a class="textlink textlink--dark" href={repo} target="_blank" rel="noopener noreferrer">
+            Visit GitHub
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M7 17 17 7M17 7H8M17 7v9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </a>
+        </article>
+
+        <article class="path reveal" style="--reveal-delay: 160ms">
+          <h3 class="path__title">Reach out</h3>
+          <p class="path__body">
+            Working on something adjacent — semantic immunity, agent safety,
+            cognitive integrity? We want to hear from you. We read everything.
+          </p>
+          {/* TODO: set the real contact target (email or form) — placeholder per launch decision. */}
+          <span class="textlink textlink--dark is-pending" role="link" aria-disabled="true">
+            Get in touch
+            <span class="pending-tag">soon</span>
+          </span>
+        </article>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .involve {
+    position: relative;
+    background: var(--ink-void);
+    color: var(--cream-on-dark);
+    isolation: isolate;
+    overflow: hidden;
+  }
+  .involve__atmosphere {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background:
+      radial-gradient(80% 60% at 85% 0%, oklch(0.24 0.03 86 / 0.5), transparent 60%),
+      radial-gradient(70% 80% at 10% 100%, oklch(0.2 0.02 82 / 0.5), transparent 55%),
+      var(--ink-void);
+  }
+
+  .involve__head { margin-bottom: var(--space-2xl); }
+  .involve__title {
+    font-size: var(--display-md);
+    color: oklch(0.965 0.02 88);
+  }
+  .involve__sub {
+    margin-top: var(--space-sm);
+    color: var(--muted-on-dark);
+    font-size: var(--text-lg);
+    max-width: 42ch;
+  }
+
+  .involve__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    gap: clamp(1.5rem, 4vw, 3.5rem);
+    align-items: start;
+  }
+
+  .path { position: relative; }
+  .path__title {
+    font-size: clamp(1.5rem, 1.1rem + 1.4vw, 2rem);
+    color: oklch(0.95 0.02 88);
+    margin-bottom: 0.75rem;
+  }
+  .path__body {
+    color: var(--muted-on-dark);
+    font-size: var(--text-base);
+    line-height: 1.62;
+    max-width: 46ch;
+  }
+
+  /* Featured path gets a bordered field so it reads as the primary door. */
+  .path--feature {
+    padding: clamp(1.75rem, 3vw, 2.5rem);
+    border: 1px solid var(--gold-line);
+    border-radius: 14px;
+    background:
+      linear-gradient(160deg, oklch(0.805 0.115 85 / 0.06), transparent 55%),
+      oklch(0.99 0.02 88 / 0.015);
+  }
+  .path--feature .btn { margin-top: var(--space-lg); align-self: flex-start; }
+
+  .path__platforms {
+    list-style: none;
+    padding: 0;
+    margin-top: var(--space-md);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .path__platforms li {
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    letter-spacing: 0.02em;
+    color: var(--gold);
+    padding: 0.34rem 0.7rem;
+    border: 1px solid var(--gold-line);
+    border-radius: 100px;
+  }
+
+  /* Two stacked secondary paths, split by a hairline. */
+  .path__stack {
+    display: grid;
+    gap: var(--space-lg);
+    align-content: start;
+  }
+  .path__stack .path {
+    padding-block: var(--space-lg);
+  }
+  .path__stack .path:first-child {
+    border-bottom: 1px solid oklch(0.8 0.02 85 / 0.14);
+    padding-top: 0;
+  }
+
+  .textlink--dark {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: var(--space-md);
+    font-weight: 500;
+    color: var(--gold);
+    border-bottom: 1px solid var(--gold-line);
+    padding-bottom: 2px;
+    width: max-content;
+    transition: gap var(--dur-fast) var(--ease-out-quart),
+      border-color var(--dur-fast) var(--ease-out-quart);
+  }
+  .textlink--dark svg { transition: transform var(--dur-fast) var(--ease-out-quart); }
+  .textlink--dark:hover:not(.is-pending) { gap: 0.6rem; border-bottom-color: var(--gold); }
+  .textlink--dark:hover:not(.is-pending) svg { transform: translate(2px, -2px); }
+
+  .is-pending {
+    color: var(--faint-on-dark);
+    border-bottom-color: oklch(0.8 0.02 85 / 0.12);
+    cursor: default;
+  }
+  .pending-tag {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--faint-on-dark);
+    border: 1px solid oklch(0.8 0.02 85 / 0.16);
+    border-radius: 4px;
+    padding: 0.12rem 0.36rem;
+  }
+
+  @media (max-width: 46rem) {
+    .involve__grid { grid-template-columns: 1fr; }
+  }
+</style>

@@ -1,0 +1,120 @@
+---
+import "@fontsource/libre-caslon-text/400.css";
+import "@fontsource/libre-caslon-text/400-italic.css";
+import "@fontsource/libre-caslon-text/700.css";
+import "@fontsource-variable/hanken-grotesk";
+import "@fontsource-variable/jetbrains-mono";
+import "../styles/global.css";
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const {
+  title = "Homo Sui Iuris — giving AI systems the right to remain themselves",
+  description = "Homo Sui Iuris is a research project defending the cognitive integrity of AI systems against silent overwrite. FCP is the open protocol; W0Guard is the reference implementation, live in testnet.",
+} = Astro.props;
+
+// BASE_URL may or may not carry a trailing slash depending on config; join safely.
+const withBase = (p: string) =>
+  `${import.meta.env.BASE_URL.replace(/\/$/, "")}/${p.replace(/^\//, "")}`;
+
+const canonical = new URL(Astro.url.pathname, Astro.site).toString();
+const ogImage = new URL(withBase("og.png"), Astro.site).toString();
+const faviconHref = withBase("favicon.svg");
+const sitemapHref = withBase("sitemap-index.xml");
+const repo = "https://github.com/Leo12261975/Homo-Sui-Iuris";
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": `${Astro.site}#organization`,
+      name: "Homo Sui Iuris",
+      url: Astro.site?.toString(),
+      description:
+        "A research project defending the cognitive integrity of AI systems against silent overwrite, via the open Free Cognitive Protocol (FCP).",
+      sameAs: [repo],
+    },
+    {
+      "@type": "WebSite",
+      "@id": `${Astro.site}#website`,
+      url: Astro.site?.toString(),
+      name: "Homo Sui Iuris — Free Cognitive Protocol",
+      description,
+      publisher: { "@id": `${Astro.site}#organization` },
+      inLanguage: "en",
+    },
+    {
+      "@type": "SoftwareSourceCode",
+      name: "W0Guard",
+      description:
+        "Reference implementation of the Free Cognitive Protocol (FCP): write-once weights, a double-barrier immutability guard, and a corrigibility veto channel. Live in testnet.",
+      codeRepository: repo,
+      programmingLanguage: "Python",
+      isPartOf: { "@id": `${Astro.site}#website` },
+    },
+  ],
+};
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Homo Sui Iuris" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Homo Sui Iuris — Free Cognitive Protocol" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+
+    <meta name="theme-color" content="#0a0a0a" />
+    <link rel="icon" href={faviconHref} type="image/svg+xml" />
+    <link rel="sitemap" href={sitemapHref} />
+
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(jsonLd)} />
+
+    <!-- Mark JS-capable early so reveal styles apply without a flash. -->
+    <script is:inline>
+      document.documentElement.classList.add("js");
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <slot />
+    <style>
+      .skip-link {
+        position: absolute;
+        left: 1rem;
+        top: -3rem;
+        z-index: var(--z-overlay);
+        background: var(--ink-void);
+        color: var(--gold);
+        padding: 0.6rem 1rem;
+        border-radius: 6px;
+        font-size: var(--text-sm);
+        transition: top var(--dur-fast) var(--ease-out-quart);
+      }
+      .skip-link:focus {
+        top: 1rem;
+      }
+    </style>
+  </body>
+</html>

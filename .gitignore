@@ -4,3 +4,7 @@ venv/
 node_tokens.json
 relay_logs/
 *.jsonl
+
+.claude
+
+**/node_modules/
