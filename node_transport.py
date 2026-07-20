@@ -239,6 +239,13 @@ class NodeTransport:
                 await on_antigen(payload)
                 if stop_event is not None and stop_event.is_set():
                     return
+            # incoming_antigens() ended without stop_event being set —
+            # the relay closed the connection, possibly cleanly (no
+            # ConnectionClosed raised, the async iterator just finished).
+            # Treat this the same as a noisy drop: run_forever() must
+            # fire on_disconnected() and back off, not silently fall
+            # through as if nothing happened.
+            raise ConnectionError("relay closed the connection")
         finally:
             heartbeat_task.cancel()
             flush_task.cancel()
