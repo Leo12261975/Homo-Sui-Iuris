@@ -168,3 +168,91 @@ async def test_auth_failure_does_not_retry_forever(tmp_path, monkeypatch):
             )
     finally:
         await stop_relay(server_task)
+
+
+@pytest.mark.asyncio
+async def test_reconnect_callbacks_fire_in_order(tmp_path, monkeypatch):
+    """The three visibility callbacks added for the silent-reconnect bug
+    (dry run, 2026-07-18) must fire in the right order around a real
+    drop+recovery: on_disconnected() when the session actually breaks,
+    on_reconnecting(sleep_for) before each backoff sleep, on_reconnected()
+    only once the NEW session's handshake actually succeeds — not just
+    on any retry attempt."""
+    monkeypatch.chdir(tmp_path)
+    tokens = {"Tester_R": "tok-r"}
+    log_dir = tmp_path / "relay_logs"
+    port = PORT + 2  # separate port from the other tests in this file
+
+    server_task = await start_relay(tokens, port, log_dir)
+
+    events = []
+
+    async def on_antigen(_payload):
+        pass
+
+    client = NodeTransport(f"ws://{HOST}:{port}", "Tester_R", "tok-r")
+    run_task = asyncio.create_task(
+        client.run_forever(
+            on_antigen=on_antigen,
+            initial_backoff=0.1,
+            max_backoff=0.5,
+            backoff_factor=2.0,
+            heartbeat_interval=9999,
+            flush_interval=9999,
+            on_disconnected=lambda: events.append("disconnected"),
+            on_reconnecting=lambda sleep_for: events.append(("reconnecting", sleep_for)),
+            on_reconnected=lambda: events.append("reconnected"),
+        )
+    )
+
+    try:
+        await asyncio.wait_for(client.wait_connected(), timeout=2)
+        assert events == [], (
+            "a callback fired on the very first connection — these are "
+            "reconnect signals, not connect signals, and firing here would "
+            "show a bogus 'Reconnected' message on program startup."
+        )
+
+        await stop_relay(server_task)
+        for _ in range(50):
+            if not client._connected_event.is_set():
+                break
+            await asyncio.sleep(0.05)
+        assert not client._connected_event.is_set()
+
+        for _ in range(20):
+            if len(events) >= 2:
+                break
+            await asyncio.sleep(0.05)
+        assert events[0] == "disconnected", f"expected 'disconnected' first, got {events}"
+        assert events[1][0] == "reconnecting", f"expected 'reconnecting' second, got {events}"
+        assert "reconnected" not in events, (
+            "on_reconnected fired before the relay even came back — "
+            "it must only fire after a real successful handshake."
+        )
+
+        server_task = await start_relay(tokens, port, log_dir)
+        await asyncio.wait_for(client.wait_connected(), timeout=5)
+        assert client._connected_event.is_set()
+
+        for _ in range(40):
+            if "reconnected" in events:
+                break
+            await asyncio.sleep(0.05)
+        assert events.count("reconnected") == 1, (
+            f"expected on_reconnected exactly once after recovery, got: {events}"
+        )
+        assert events[-1] == "reconnected", (
+            f"on_reconnected should be the last event so far, got: {events}"
+        )
+        assert events.count("disconnected") == 1, (
+            f"on_disconnected should have fired exactly once for one real drop, got: {events}"
+        )
+
+    finally:
+        run_task.cancel()
+        try:
+            await run_task
+        except (asyncio.CancelledError, AuthenticationError):
+            pass
+        await stop_relay(server_task)
