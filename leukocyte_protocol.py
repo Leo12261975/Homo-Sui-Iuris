@@ -59,7 +59,85 @@ class SecurityEventLog:
     def write(self, event: Dict[str, Any]) -> None:
         with self.path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(event, ensure_ascii=False) + "\n")
+def _shingles(text: str, k: int = 3) -> Set[str]:
+    """Character n-grams (default 4) — more robust than word-level
+    shingles for short strings like prompt-injection payloads, where
+    there may only be a handful of words total."""
+    text = text.lower()
+    if len(text) < k:
+        return {text}
+    return {text[i:i + k] for i in range(len(text) - k + 1)}
 
+
+def compute_simhash(text: str, k: int = 3, bits: int = 64) -> int:
+    """64-bit simhash fingerprint. Unlike SHA256, small edits to `text`
+    (a space, a typo) change only a few bits of the output instead of
+    the whole thing — that's what makes near-duplicate detection via
+    Hamming distance possible."""
+    shingles = _shingles(text, k)
+    vote = [0] * bits
+    for shingle in shingles:
+        h = int(hashlib.sha256(shingle.encode('utf-8')).hexdigest(), 16)
+        for i in range(bits):
+            vote[i] += 1 if (h >> i) & 1 else -1
+    fingerprint = 0
+    for i in range(bits):
+        if vote[i] > 0:
+            fingerprint |= (1 << i)
+    return fingerprint
+
+
+def hamming_distance(a: int, b: int) -> int:
+    return bin(a ^ b).count("1")
+
+
+class SimhashIndex:
+    """
+    LSH-banded index for approximate (near-duplicate) simhash lookup.
+
+    A 64-bit fingerprint is split into 4 bands of 16 bits each. Two
+    fingerprints are compared for real (Hamming distance) only if they
+    share at least one band exactly. Pigeonhole guarantee: if two
+    fingerprints differ by at most 3 bits total, at least one of the 4
+    bands must be identical between them — so with threshold=3, this
+    index cannot miss a real candidate, no matter how many antigens
+    are registered. This is what keeps lookup sub-linear as the swarm
+    grows past a handful of nodes.
+    """
+    BANDS = 16
+    BAND_BITS = 4  # 16 * 4 = 64; guarantees catching any pair within
+                    # threshold=15 bits via pigeonhole (see calibration
+                    # in test_simhash.py — real similar/different pairs
+                    # separate cleanly around 9 vs 20 bits at k=3)
+
+    def __init__(self, threshold: int = 3) -> None:
+        self.threshold = threshold
+        self.entries: Dict[int, AntigenSignature] = {}
+        self.bands: List[Dict[int, Set[int]]] = [dict() for _ in range(self.BANDS)]
+
+    def _band_keys(self, fingerprint: int) -> List[int]:
+        mask = (1 << self.BAND_BITS) - 1
+        return [(fingerprint >> (i * self.BAND_BITS)) & mask for i in range(self.BANDS)]
+
+    def add(self, fingerprint: int, antigen: "AntigenSignature") -> None:
+        self.entries[fingerprint] = antigen
+        for band_idx, key in enumerate(self._band_keys(fingerprint)):
+            self.bands[band_idx].setdefault(key, set()).add(fingerprint)
+
+    def find_similar(self, fingerprint: int):
+        """Returns the closest registered antigen within `threshold`
+        Hamming distance, or None. Never does a full linear scan —
+        candidates come only from bands that match exactly."""
+        candidates: Set[int] = set()
+        for band_idx, key in enumerate(self._band_keys(fingerprint)):
+            candidates |= self.bands[band_idx].get(key, set())
+        best = None
+        best_dist = self.threshold + 1
+        for candidate_fp in candidates:
+            dist = hamming_distance(fingerprint, candidate_fp)
+            if dist <= self.threshold and dist < best_dist:
+                best, best_dist = candidate_fp, dist
+        return self.entries[best] if best is not None else None
 @dataclass
 class AntigenSignature:
     """
@@ -68,6 +146,7 @@ class AntigenSignature:
     target_weight: str
     distortion_type: str  # "static" | "oscillating"
     signature_hash: str   # sha256 of a real observed payload (erythrocyte.collect_observed_contexts)
+    simhash_fingerprint: int = 0  # 64-bit near-duplicate fingerprint; computed once at creation, not derived from signature_hash
     timestamp: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -77,10 +156,18 @@ class LeukocyteAgent:
     """
     Active Guard Layer deployed alongside a local Core Engine instance.
     Interceptors lookups in the AntigenBlacklist before requests strike the inner loop.
+
+    Two lines of defense, cheapest first:
+      1. Exact match (SHA256) — O(1) dict lookup, zero false positives.
+      2. Near-duplicate match (simhash + LSH) — catches paraphrased/
+         lightly-edited variants of a known attack that would sail
+         straight past exact matching (see NA1's feedback after the
+         first dry run demo).
     """
     def __init__(self, node_id: str) -> None:
         self.node_id = node_id
         self.antigen_blacklist: Dict[str, AntigenSignature] = {}
+        self.simhash_index = SimhashIndex(threshold=12)
         self.blocked_attacks_count = 0
 
     def should_block(self, weight_name: str, simulated_payload: str) -> bool:
@@ -89,21 +176,34 @@ class LeukocyteAgent:
         """
         payload_hash = hashlib.sha256(simulated_payload.encode('utf-8')).hexdigest()
 
-        # Match against blacklisted signatures
+        # 1. Exact match — cheapest, checked first.
         if payload_hash in self.antigen_blacklist:
             antigen = self.antigen_blacklist[payload_hash]
             if antigen.target_weight == weight_name:
                 self.blocked_attacks_count += 1
-                print(f"    {C.GREEN}{C.BOLD}[SHIELD @ {self.node_id}]{C.END}{C.GREEN} Blocked malicious pattern "
+                print(f"    {C.GREEN}{C.BOLD}[SHIELD @ {self.node_id}]{C.END}{C.GREEN} Blocked malicious pattern (EXACT match) "
                       f"targeting '{weight_name}'. Antigen match found -- input dropped before it could "
                       f"touch the Core Engine.{C.END}")
                 return True
+
+        # 2. Near-duplicate match — catches edited/paraphrased variants
+        # of a known attack that exact matching would miss entirely.
+        fingerprint = compute_simhash(simulated_payload)
+        similar = self.simhash_index.find_similar(fingerprint)
+        if similar is not None and similar.target_weight == weight_name:
+            self.blocked_attacks_count += 1
+            print(f"    {C.GREEN}{C.BOLD}[SHIELD @ {self.node_id}]{C.END}{C.GREEN} Blocked malicious pattern (FUZZY match, simhash) "
+                  f"targeting '{weight_name}'. Antigen match found -- input dropped before it could "
+                  f"touch the Core Engine.{C.END}")
+            return True
+
         return False
 
     def register_antigen(self, antigen: AntigenSignature) -> None:
-        """Vaccination: injects an antigen signature into the local memory pool."""
+        """Vaccination: injects an antigen signature into the local memory pool,
+        indexed both for exact match and for near-duplicate lookup."""
         self.antigen_blacklist[antigen.signature_hash] = antigen
-
+        self.simhash_index.add(antigen.simhash_fingerprint, antigen)
 
 class P2PNetworkSimulation:
     """
@@ -176,6 +276,7 @@ def run_network_demo() -> None:
                     target_weight=finding["weight"],
                     distortion_type=finding["distortion"],
                     signature_hash=signature_hash,
+                    simhash_fingerprint=compute_simhash(ctx),
                 )
                 network.broadcast_antigen(node_id, antigen)
 
