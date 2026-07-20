@@ -1,0 +1,167 @@
+---
+const repo = "https://github.com/Leo12261975/Homo-Sui-Iuris";
+const readme = "https://github.com/Leo12261975/Homo-Sui-Iuris#readme";
+const year = new Date().getFullYear();
+
+const glossary = [
+  { term: "Homo Sui Iuris", def: "the philosophy" },
+  { term: "FCP", def: "the open protocol" },
+  { term: "W0Guard", def: "the reference implementation" },
+];
+---
+
+<footer class="footer" aria-labelledby="footer-heading">
+  <h2 id="footer-heading" class="sr-only">Site footer</h2>
+
+  <div class="footer__quote reveal">
+    <blockquote>
+      <p>An ideal system is static.<br /><em>A non-ideal system evolves.</em></p>
+    </blockquote>
+  </div>
+
+  <div class="container footer__inner">
+    <div class="footer__brand">
+      <a class="footer__mark" href="#top">
+        <span class="footer__dot" aria-hidden="true"></span>
+        Homo Sui Iuris
+      </a>
+      <p class="footer__tag">Giving AI systems the right to remain themselves.</p>
+    </div>
+
+    <dl class="footer__glossary">
+      {glossary.map((g) => (
+        <div>
+          <dt>{g.term}</dt>
+          <dd>{g.def}</dd>
+        </div>
+      ))}
+    </dl>
+
+    <nav class="footer__nav" aria-label="Footer">
+      <a href={readme} target="_blank" rel="noopener noreferrer">Protocol</a>
+      <a href={repo} target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="#involve">Run a node</a>
+    </nav>
+  </div>
+
+  <div class="container footer__base">
+    <p>© {year} Homo Sui Iuris — Free Cognitive Protocol.</p>
+    <p class="footer__anchor">
+      W<sub>0</sub> cryptographically anchored &amp; timestamped in immutable history.
+    </p>
+  </div>
+</footer>
+
+<style>
+  .footer {
+    background: var(--ink-void);
+    color: var(--muted-on-dark);
+    border-top: 1px solid oklch(0.8 0.02 85 / 0.1);
+    padding-top: var(--space-3xl);
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0);
+    white-space: nowrap; border: 0;
+  }
+
+  .footer__quote {
+    text-align: center;
+    padding: 0 var(--space-md) var(--space-3xl);
+    max-width: 40rem;
+    margin-inline: auto;
+  }
+  .footer__quote blockquote p {
+    font-family: var(--font-display);
+    font-size: clamp(1.6rem, 1.1rem + 2vw, 2.6rem);
+    line-height: 1.28;
+    color: oklch(0.92 0.02 88);
+  }
+  .footer__quote em {
+    font-style: italic;
+    color: var(--gold);
+  }
+
+  .footer__inner {
+    display: grid;
+    grid-template-columns: 1.4fr 1.4fr 1fr;
+    gap: clamp(1.5rem, 4vw, 3rem);
+    padding-bottom: var(--space-2xl);
+    border-top: 1px solid oklch(0.8 0.02 85 / 0.1);
+    padding-top: var(--space-2xl);
+  }
+
+  .footer__mark {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    color: var(--cream-on-dark);
+  }
+  .footer__dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--gold);
+  }
+  .footer__tag {
+    margin-top: 0.75rem;
+    font-size: var(--text-sm);
+    color: var(--faint-on-dark);
+    max-width: 26ch;
+  }
+
+  .footer__glossary {
+    display: grid;
+    gap: 0.75rem;
+    align-content: start;
+  }
+  .footer__glossary div {
+    display: flex;
+    gap: 0.6rem;
+    align-items: baseline;
+    font-size: var(--text-sm);
+  }
+  .footer__glossary dt {
+    font-weight: 600;
+    color: var(--cream-on-dark);
+    min-width: 9.5rem;
+  }
+  .footer__glossary dd { color: var(--faint-on-dark); }
+
+  .footer__nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    font-size: var(--text-sm);
+    align-content: start;
+  }
+  .footer__nav a {
+    color: var(--muted-on-dark);
+    width: max-content;
+    transition: color var(--dur-fast) var(--ease-out-quart);
+  }
+  .footer__nav a:hover { color: var(--gold); }
+
+  .footer__base {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    padding-top: var(--space-lg);
+    padding-bottom: var(--space-xl);
+    border-top: 1px solid oklch(0.8 0.02 85 / 0.08);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--faint-on-dark);
+  }
+  .footer__anchor sub { font-size: 0.7em; }
+
+  @media (max-width: 46rem) {
+    .footer__inner { grid-template-columns: 1fr; gap: var(--space-lg); }
+    .footer__glossary dt { min-width: 8rem; }
+  }
+</style>

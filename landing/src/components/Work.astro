@@ -1,0 +1,208 @@
+---
+const repo = "https://github.com/Leo12261975/Homo-Sui-Iuris";
+
+const entries = [
+  {
+    kind: "Framework",
+    year: "2026",
+    title: "W0Guard",
+    href: repo,
+    external: true,
+    body: "The reference implementation of FCP: a distributed network of nodes running write-once weights, a double-barrier immutability guard, and a corrigibility veto channel. Live in testnet and tested against real adversarial simulations — attack-detection, reconnect behaviour, and node-coordination data gathered from live dry runs, not just unit tests.",
+    tags: ["write-once weights", "double-barrier guard", "veto channel"],
+  },
+  {
+    kind: "Demo",
+    year: "2026",
+    title: "Leukocyte Protocol",
+    href: repo,
+    external: true,
+    body: "A zero-dependency, no-network demo of the core defence mechanism — three virtual nodes in a single process. Built to explain the idea in minutes, with no token or relay to set up first.",
+    tags: ["zero-dependency", "runs in one process"],
+  },
+];
+---
+
+<section class="work section" id="work" aria-labelledby="work-title">
+  <div class="container">
+    <header class="work__head reveal">
+      <h2 class="work__title" id="work-title">Protocol &amp; testnet.</h2>
+      <p class="work__sub">
+        What's actually running, and what you can read today.
+      </p>
+    </header>
+
+    <ol class="work__list">
+      {entries.map((e, i) => (
+        <li class="entry reveal" style={`--reveal-delay: ${i * 90}ms`}>
+          <a class="entry__link" href={e.href} target="_blank" rel="noopener noreferrer">
+            <div class="entry__meta">
+              <span class="entry__kind">{e.kind}</span>
+              <span class="entry__year">{e.year}</span>
+            </div>
+            <div class="entry__main">
+              <h3 class="entry__title">{e.title}</h3>
+              <p class="entry__body">{e.body}</p>
+              <ul class="entry__tags">
+                {e.tags.map((t) => <li>{t}</li>)}
+              </ul>
+            </div>
+            <span class="entry__action" aria-hidden="true">
+              <span class="entry__action-label">View</span>
+              <svg class="entry__arrow" width="22" height="22" viewBox="0 0 24 24" fill="none">
+                <path d="M7 17 17 7M17 7H8M17 7v9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+          </a>
+        </li>
+      ))}
+    </ol>
+  </div>
+</section>
+
+<style>
+  .work {
+    background: var(--paper-sunk);
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .work__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-xl);
+  }
+  .work__title { font-size: var(--display-sm); }
+  .work__sub {
+    color: var(--ink-faint);
+    font-size: var(--text-base);
+    max-width: 34ch;
+  }
+
+  .work__list {
+    list-style: none;
+    padding: 0;
+    border-top: 1px solid var(--rule-strong);
+  }
+  .entry {
+    border-bottom: 1px solid var(--rule);
+  }
+  .entry__link {
+    display: grid;
+    grid-template-columns: 8.5rem minmax(0, 1fr) auto;
+    align-items: center;
+    gap: clamp(1rem, 4vw, 3rem);
+    padding: clamp(1.75rem, 3.5vw, 2.75rem) clamp(0.75rem, 2vw, 1.5rem)
+      clamp(1.75rem, 3.5vw, 2.75rem) 0;
+    transition: background var(--dur-med) var(--ease-out-quart);
+  }
+  .entry__link:hover {
+    background: linear-gradient(
+      to right,
+      oklch(0.805 0.115 85 / 0.07),
+      transparent 70%
+    );
+  }
+
+  .entry__action {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: var(--gold-ink);
+    justify-self: end;
+  }
+  .entry__action-label {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    opacity: 0;
+    transform: translateX(8px);
+    transition:
+      opacity var(--dur-med) var(--ease-out-quart),
+      transform var(--dur-med) var(--ease-out-quart);
+  }
+  .entry__arrow {
+    flex: none;
+    color: var(--ink-faint);
+    transition:
+      color var(--dur-fast) var(--ease-out-quart),
+      transform var(--dur-med) var(--ease-out-expo);
+  }
+  .entry__link:hover .entry__action-label { opacity: 1; transform: none; }
+  .entry__link:hover .entry__arrow {
+    color: var(--gold-ink);
+    transform: translate(4px, -4px);
+  }
+
+  .entry__meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding-top: 0.35rem;
+  }
+  .entry__kind {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--gold-ink);
+  }
+  .entry__year {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+  }
+
+  .entry__title {
+    font-size: clamp(1.6rem, 1.1rem + 1.8vw, 2.3rem);
+    color: var(--ink);
+    transition: color var(--dur-fast) var(--ease-out-quart);
+  }
+  .entry__link:hover .entry__title { color: var(--gold-ink); }
+
+  .entry__body {
+    margin-top: 0.75rem;
+    color: var(--ink-soft);
+    font-size: var(--text-base);
+    line-height: 1.6;
+    max-width: 60ch;
+  }
+
+  .entry__tags {
+    list-style: none;
+    padding: 0;
+    margin-top: var(--space-md);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .entry__tags li {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.02em;
+    color: var(--ink-soft);
+    padding: 0.32rem 0.6rem;
+    border: 1px solid var(--rule-strong);
+    border-radius: 100px;
+    background: var(--paper-raise);
+  }
+
+  @media (max-width: 40rem) {
+    .entry__link {
+      grid-template-columns: 1fr;
+      gap: 0.75rem;
+      padding-right: 0;
+    }
+    .entry__meta {
+      flex-direction: row;
+      align-items: center;
+      gap: 0.75rem;
+      padding-top: 0;
+    }
+    .entry__action { display: none; }
+  }
+</style>

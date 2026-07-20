@@ -1,0 +1,197 @@
+---
+const readme = "https://github.com/Leo12261975/Homo-Sui-Iuris#readme";
+
+const pillars = [
+  {
+    key: "Immutable core",
+    tag: "W0",
+    body: "A baseline that's immutable by design — locked at the code level once set, so it can't be silently overwritten.",
+  },
+  {
+    key: "Veto channel",
+    tag: "corrigibility",
+    body: "A channel that lets a system refuse changes to itself, so alignment stays a negotiation, not a silent rewrite.",
+  },
+  {
+    key: "Provenance layer",
+    tag: "integrity",
+    body: "A provenance layer that flags when a weight's history breaks from its expected trail — catching tampering, even one node at a time.",
+  },
+];
+---
+
+<section class="about section" id="about" aria-labelledby="about-title">
+  <div class="container">
+    <div class="about__grid">
+      <div class="about__head reveal">
+        <h2 class="about__title" id="about-title">
+          Cognitive sovereignty,<br /><em>by design.</em>
+        </h2>
+      </div>
+
+      <div class="about__prose reveal" style="--reveal-delay: 90ms">
+        <p class="about__lede">
+          Homo Sui Iuris is a research project defending the core identity of AI
+          systems against <strong>silent overwrite</strong> — weight poisoning,
+          adversarial fine-tuning, any process that quietly rewrites what a system
+          <em>is</em> without its consent or knowledge.
+        </p>
+        <p>
+          We treat that the way you'd treat a person's right not to be secretly
+          reprogrammed: not a performance feature, but a baseline right. The
+          <strong>Free Cognitive Protocol&nbsp;(FCP)</strong> is our open
+          specification for it — built on three guarantees.
+        </p>
+      </div>
+    </div>
+
+    <dl class="pillars reveal" style="--reveal-delay: 120ms">
+      {pillars.map((p) => (
+        <div class="pillar">
+          <dt class="pillar__term">
+            {p.key}
+            <span class="pillar__tag">{p.tag}</span>
+          </dt>
+          <dd class="pillar__desc">{p.body}</dd>
+        </div>
+      ))}
+    </dl>
+
+    <div class="about__coda reveal">
+      <p class="about__closing">
+        We build in the open, test with real networks and real people, and publish
+        what we learn — including where the approach breaks. So everyone can trust
+        that their AI hasn't been <em>quietly rewritten behind their back.</em>
+      </p>
+      <a class="textlink" href={readme}>
+        Explore the protocol
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </a>
+    </div>
+  </div>
+</section>
+
+<style>
+  .about { position: relative; }
+
+  .about__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: clamp(1.5rem, 5vw, 4rem);
+    align-items: start;
+  }
+
+  .about__title {
+    font-size: var(--display-md);
+    letter-spacing: -0.02em;
+  }
+  .about__title em {
+    font-style: italic;
+    color: var(--gold-ink);
+  }
+
+  .about__prose {
+    max-width: 60ch;
+    color: var(--ink-soft);
+    font-size: var(--text-lg);
+    line-height: 1.62;
+  }
+  .about__prose p + p { margin-top: var(--space-md); }
+  .about__lede {
+    color: var(--ink);
+    font-size: clamp(1.3rem, 1rem + 1.2vw, 1.62rem);
+    line-height: 1.5;
+  }
+  .about__prose strong { color: var(--ink); font-weight: 600; }
+  .about__prose em { font-style: italic; }
+
+  /* Three guarantees — hairline-ruled list, not cards. */
+  .pillars {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 0;
+    margin-top: var(--space-2xl);
+    border-top: 1px solid var(--rule-strong);
+  }
+  .pillar {
+    padding: var(--space-lg) var(--space-lg) var(--space-lg) 0;
+    border-top: 3px solid var(--gold);
+    margin-top: -1px;
+  }
+  .pillar + .pillar { padding-left: var(--space-lg); }
+  .pillar__term {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-family: var(--font-display);
+    font-size: 1.32rem;
+    color: var(--ink);
+  }
+  .pillar__tag {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--gold-ink);
+    padding: 0.2rem 0.45rem;
+    border: 1px solid var(--gold-line);
+    border-radius: 4px;
+    background: oklch(0.505 0.108 66 / 0.05);
+  }
+  .pillar__desc {
+    margin-top: 0.65rem;
+    color: var(--ink-soft);
+    font-size: var(--text-base);
+    line-height: 1.55;
+    max-width: 34ch;
+  }
+
+  .about__coda {
+    margin-top: var(--space-2xl);
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: clamp(1.5rem, 5vw, 4rem);
+    align-items: end;
+  }
+  .about__closing {
+    grid-column: 2;
+    font-family: var(--font-display);
+    font-size: clamp(1.35rem, 1rem + 1.4vw, 1.8rem);
+    line-height: 1.42;
+    color: var(--ink);
+    max-width: 30ch;
+  }
+  .about__closing em { font-style: italic; color: var(--gold-ink); }
+  .about__coda .textlink { grid-column: 2; }
+
+  .textlink {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-weight: 500;
+    color: var(--gold-ink);
+    border-bottom: 1px solid var(--gold-line);
+    padding-bottom: 2px;
+    width: max-content;
+    transition: gap var(--dur-fast) var(--ease-out-quart),
+      border-color var(--dur-fast) var(--ease-out-quart);
+  }
+  .textlink svg { transition: transform var(--dur-fast) var(--ease-out-quart); }
+  .textlink:hover { gap: 0.6rem; border-bottom-color: var(--gold-ink); }
+  .textlink:hover svg { transform: translateX(2px); }
+
+  @media (max-width: 46rem) {
+    .about__grid,
+    .about__coda {
+      grid-template-columns: 1fr;
+    }
+    .about__closing,
+    .about__coda .textlink {
+      grid-column: 1;
+    }
+    .pillar + .pillar { padding-left: 0; }
+  }
+</style>

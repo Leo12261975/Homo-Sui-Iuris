@@ -1,0 +1,292 @@
+---
+import { Image } from "astro:assets";
+import figure from "../assets/cognition-figure.png";
+
+const readme = "https://github.com/Leo12261975/Homo-Sui-Iuris#readme";
+---
+
+<section class="hero" id="top" aria-labelledby="hero-title">
+  <div class="hero__atmosphere" aria-hidden="true"></div>
+
+  <div class="hero__inner container">
+    <figure class="hero__figure">
+      <span class="hero__glow" aria-hidden="true"></span>
+      <Image
+        src={figure}
+        alt="A classical profile in relief with gold circuitry emerging from the back of the skull toward a single glowing node — cognition rendered as a sovereign, self-defending system."
+        widths={[300, 450, 600]}
+        sizes="(max-width: 52rem) 220px, 320px"
+        loading="eager"
+        fetchpriority="high"
+        class="hero__img"
+      />
+    </figure>
+
+    <span class="hero__divider" aria-hidden="true"></span>
+
+    <div class="hero__body">
+      <p class="hero__status">
+        <span class="hero__dot" aria-hidden="true"></span>
+        <span>Free Cognitive Protocol · <b>testnet live</b></span>
+      </p>
+
+      <h1 class="hero__title" id="hero-title">Homo Sui Iuris</h1>
+      <p class="hero__tagline">giving AI systems the right to remain themselves</p>
+
+      <p class="hero__lede">
+        The <strong>Free Cognitive Protocol&nbsp;(FCP)</strong> is an open standard
+        for AI cognitive integrity. <strong>W0Guard</strong> is our reference
+        implementation&nbsp;— running now, in testnet.
+      </p>
+
+      <div class="hero__actions">
+        <a class="btn btn--gold" href={readme}>
+          Explore the protocol
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </a>
+        <a class="btn btn--ghost" href="#involve">Run a node</a>
+      </div>
+    </div>
+  </div>
+
+  <a class="hero__scroll" href="#about" aria-label="Scroll to read more">
+    <span>Read on</span>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 5v14M6 13l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </a>
+</section>
+
+<style>
+  .hero {
+    position: relative;
+    background: var(--ink-void);
+    color: var(--cream-on-dark);
+    overflow: hidden;
+    isolation: isolate;
+    /* pull up under the sticky (transparent) nav */
+    margin-top: -4.25rem;
+    padding-top: 4.25rem;
+  }
+
+  /* Faint grain + warm vignette so the figure's texture continues into the field. */
+  .hero__atmosphere {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background:
+      radial-gradient(120% 80% at 22% 42%, oklch(0.22 0.02 82 / 0.55), transparent 60%),
+      radial-gradient(90% 120% at 90% 8%, oklch(0.2 0.03 88 / 0.35), transparent 55%),
+      var(--ink-void);
+  }
+  .hero__atmosphere::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    opacity: 0.5;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
+  }
+
+  .hero__inner {
+    display: grid;
+    grid-template-columns: minmax(180px, 320px) 1px minmax(0, 1fr);
+    align-items: center;
+    gap: clamp(1.75rem, 4vw, 3.5rem);
+    min-height: min(88svh, 780px);
+    padding-block: clamp(3rem, 8vh, 6rem);
+  }
+
+  .hero__figure {
+    position: relative;
+    justify-self: center;
+  }
+  .hero__glow {
+    position: absolute;
+    /* sits over the circuit node */
+    top: 40%;
+    left: 62%;
+    width: 46%;
+    aspect-ratio: 1;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle, var(--gold-glow), transparent 68%);
+    filter: blur(6px);
+    z-index: 1;
+    pointer-events: none;
+  }
+  .hero__img {
+    position: relative;
+    width: clamp(200px, 26vw, 320px);
+    height: auto;
+    filter: drop-shadow(0 24px 60px oklch(0 0 0 / 0.6));
+    /* Feather the near-black frame so the figure melts into the field
+       instead of reading as a rectangle. */
+    -webkit-mask-image:
+      linear-gradient(to right, transparent, #000 7%, #000 93%, transparent),
+      linear-gradient(to bottom, transparent, #000 6%, #000 94%, transparent);
+    -webkit-mask-composite: source-in;
+    mask-image:
+      linear-gradient(to right, transparent, #000 7%, #000 93%, transparent),
+      linear-gradient(to bottom, transparent, #000 6%, #000 94%, transparent);
+    mask-composite: intersect;
+  }
+
+  .hero__divider {
+    align-self: stretch;
+    width: 1px;
+    justify-self: center;
+    background: linear-gradient(
+      to bottom,
+      transparent,
+      var(--gold-line) 18%,
+      var(--gold-line) 82%,
+      transparent
+    );
+    transform-origin: center;
+  }
+
+  .hero__body { max-width: 40rem; }
+
+  .hero__status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.08em;
+    color: var(--muted-on-dark);
+    text-transform: uppercase;
+    margin-bottom: var(--space-lg);
+  }
+  .hero__status b { color: var(--gold); font-weight: 500; }
+  .hero__dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--gold);
+    box-shadow: 0 0 0 0 var(--gold-glow);
+    animation: pulse 2.6s var(--ease-out-quart) infinite;
+  }
+
+  .hero__title {
+    font-size: var(--display-lg);
+    text-transform: uppercase;
+    letter-spacing: 0.018em;
+    line-height: 1;
+    color: oklch(0.965 0.02 88);
+  }
+  .hero__tagline {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: var(--text-xl);
+    color: var(--gold);
+    margin-top: 0.6rem;
+    letter-spacing: 0.005em;
+  }
+  .hero__lede {
+    margin-top: var(--space-lg);
+    font-size: var(--text-lg);
+    line-height: 1.6;
+    color: var(--cream-on-dark);
+    max-width: 40ch;
+  }
+  .hero__lede strong { color: oklch(0.97 0.02 88); font-weight: 500; }
+
+  .hero__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    margin-top: var(--space-xl);
+  }
+
+  .hero__scroll {
+    position: absolute;
+    bottom: 1.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--faint-on-dark);
+    transition: color var(--dur-fast) var(--ease-out-quart);
+  }
+  .hero__scroll:hover { color: var(--gold); }
+  .hero__scroll svg { animation: nudge 2.4s var(--ease-out-quart) infinite; }
+
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 var(--gold-glow); }
+    70% { box-shadow: 0 0 0 9px oklch(0.82 0.14 86 / 0); }
+    100% { box-shadow: 0 0 0 0 oklch(0.82 0.14 86 / 0); }
+  }
+  @keyframes nudge {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(3px); }
+  }
+
+  /* --- Orchestrated load reveal (above the fold, on load) --- */
+  @media (prefers-reduced-motion: no-preference) {
+    :root.js .hero__figure,
+    :root.js .hero__status,
+    :root.js .hero__title,
+    :root.js .hero__tagline,
+    :root.js .hero__lede,
+    :root.js .hero__actions {
+      opacity: 0;
+      animation: rise var(--dur-slow) var(--ease-out-expo) forwards;
+    }
+    :root.js .hero__figure { animation-delay: 0.05s; animation-name: fade-scale; }
+    :root.js .hero__divider {
+      transform: scaleY(0);
+      animation: draw 0.9s var(--ease-out-expo) 0.35s forwards;
+    }
+    :root.js .hero__status { animation-delay: 0.45s; }
+    :root.js .hero__title { animation-delay: 0.58s; }
+    :root.js .hero__tagline { animation-delay: 0.72s; }
+    :root.js .hero__lede { animation-delay: 0.86s; }
+    :root.js .hero__actions { animation-delay: 1s; }
+    :root.js .hero__scroll {
+      opacity: 0;
+      animation: rise var(--dur-slow) var(--ease-out-expo) 1.4s forwards;
+    }
+  }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes fade-scale {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes draw {
+    from { transform: scaleY(0); }
+    to { transform: scaleY(1); }
+  }
+
+  /* --- Responsive: stack the figure above the text --- */
+  @media (max-width: 52rem) {
+    .hero__inner {
+      grid-template-columns: 1fr;
+      justify-items: start;
+      gap: var(--space-lg);
+      min-height: 0;
+      padding-block: clamp(2.5rem, 8vh, 4rem);
+      text-align: left;
+    }
+    .hero__divider { display: none; }
+    .hero__figure { justify-self: center; }
+    .hero__img { width: clamp(160px, 44vw, 220px); }
+    .hero__scroll { display: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero__dot { animation: none; }
+    .hero__scroll svg { animation: none; }
+  }
+</style>

@@ -1,0 +1,60 @@
+---
+import Base from "../layouts/Base.astro";
+import SiteNav from "../components/SiteNav.astro";
+import Hero from "../components/Hero.astro";
+import About from "../components/About.astro";
+import Work from "../components/Work.astro";
+import Involve from "../components/Involve.astro";
+import SiteFooter from "../components/SiteFooter.astro";
+---
+
+<Base>
+  <SiteNav />
+  <main id="main">
+    <Hero />
+    <About />
+    <Work />
+    <Involve />
+  </main>
+  <SiteFooter />
+</Base>
+
+<script>
+  // Scroll reveal — enhances an already-visible default. If IO is unavailable
+  // or motion is reduced, elements simply render in place (handled in CSS).
+  const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const items = Array.from(document.querySelectorAll<HTMLElement>(".reveal"));
+  const reveal = (el: Element) => el.classList.add("is-in");
+
+  if (prefersReduced || !("IntersectionObserver" in window)) {
+    items.forEach(reveal);
+  } else {
+    const io = new IntersectionObserver(
+      (entries, obs) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            reveal(entry.target);
+            obs.unobserve(entry.target);
+          }
+        }
+      },
+      { rootMargin: "0px 0px -10% 0px", threshold: 0.1 }
+    );
+    items.forEach((el) => io.observe(el));
+
+    // Backstop: content must never stay permanently hidden. Real visitors
+    // scroll within a couple of seconds and get the staggered entrance; a
+    // non-scrolling context (headless capture, printed page, motionless tab)
+    // reveals everything once the page is loaded and idle.
+    window.addEventListener("load", () => {
+      let scrolled = false;
+      window.addEventListener("scroll", () => (scrolled = true), {
+        once: true,
+        passive: true,
+      });
+      window.setTimeout(() => {
+        if (!scrolled) items.forEach(reveal);
+      }, 1800);
+    });
+  }
+</script>
