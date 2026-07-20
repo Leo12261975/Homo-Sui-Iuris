@@ -82,6 +82,9 @@ class NetworkedLeukocyteNode:
         log_flush_interval: float = 15.0,
         heartbeat_interval: float = 30.0,
         connect_timeout: float = DEFAULT_CONNECT_TIMEOUT,
+        on_disconnected: Optional[Any] = None,
+        on_reconnecting: Optional[Any] = None,
+        on_reconnected: Optional[Any] = None,
     ) -> None:
         self.node_id = node_id
         self.transport = NodeTransport(relay_url, node_id, token)
@@ -102,6 +105,9 @@ class NetworkedLeukocyteNode:
         self._log_flush_interval = log_flush_interval
         self._heartbeat_interval = heartbeat_interval
         self._connect_timeout = connect_timeout
+        self._on_disconnected = on_disconnected
+        self._on_reconnecting = on_reconnecting
+        self._on_reconnected = on_reconnected
         self._run_forever_task: Optional[asyncio.Task] = None
 
     async def connect(self) -> None:
@@ -115,6 +121,9 @@ class NetworkedLeukocyteNode:
                 on_antigen=self._on_network_antigen,
                 heartbeat_interval=self._heartbeat_interval,
                 flush_interval=self._log_flush_interval,
+                on_disconnected=self._on_disconnected,
+                on_reconnecting=self._on_reconnecting,
+                on_reconnected=self._on_reconnected,
             )
         )
         # Race "first handshake succeeded" against "run_forever gave up
