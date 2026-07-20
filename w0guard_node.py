@@ -87,6 +87,9 @@ def build_node(config: dict) -> NetworkedLeukocyteNode:
         approval_channel=AutoApprovalChannel(always_approve=True),
         audit_log=audit_log,
         verbose=False,
+        on_disconnected=lambda: print("\n⚠ Disconnected from relay — attempting to reconnect...\n"),
+        on_reconnecting=lambda s: print(f">>> Reconnecting in {s:.1f}s...\n"),
+        on_reconnected=lambda: print("\n✅ Reconnected to relay. (Counters below are unaffected — they live in this process, not the connection.)\n"),
     )
 
 

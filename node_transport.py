@@ -166,6 +166,9 @@ class NodeTransport:
         heartbeat_interval: float = DEFAULT_HEARTBEAT_INTERVAL,
         flush_interval: float = DEFAULT_FLUSH_INTERVAL,
         stop_event: Optional[asyncio.Event] = None,
+        on_disconnected: Optional[Callable[[], None]] = None,
+        on_reconnecting: Optional[Callable[[float], None]] = None,
+        on_reconnected: Optional[Callable[[], None]] = None,
     ) -> None:
         """
         Owns the node's connection to the relay for the lifetime of the
@@ -184,9 +187,13 @@ class NodeTransport:
         loop silently forever.
         """
         backoff = initial_backoff
+        is_reconnect = False  # False for the very first attempt; True for every retry after a drop
         while stop_event is None or not stop_event.is_set():
             try:
                 await self.connect()
+                if is_reconnect and on_reconnected is not None:
+                    on_reconnected()
+                is_reconnect = False
                 backoff = initial_backoff  # reset only after a real handshake success
                 await self._run_session(on_antigen, heartbeat_interval, flush_interval, stop_event)
                 # _run_session returns normally only when stop_event fires;
@@ -198,6 +205,9 @@ class NodeTransport:
                 raise
             except (ConnectionError, OSError, websockets.InvalidHandshake, websockets.ConnectionClosed) as e:
                 log.warning("relay connection lost: %s", e)
+                if on_disconnected is not None:
+                    on_disconnected()
+                is_reconnect = True
             finally:
                 await self.close()
 
@@ -207,6 +217,8 @@ class NodeTransport:
             sleep_for = backoff * (1 + random.uniform(-jitter, jitter))
             sleep_for = max(0.0, sleep_for)
             log.info("reconnecting to relay in %.1fs", sleep_for)
+            if on_reconnecting is not None:
+                on_reconnecting(sleep_for)
             await asyncio.sleep(sleep_for)
             backoff = min(backoff * backoff_factor, max_backoff)
 
