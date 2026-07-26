@@ -10,7 +10,9 @@ plus one unprotected control node (D) to make the contrast visible.
 
 import hashlib
 import json
+import re
 import time
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Dict, Set, Any
@@ -59,84 +61,122 @@ class SecurityEventLog:
     def write(self, event: Dict[str, Any]) -> None:
         with self.path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(event, ensure_ascii=False) + "\n")
-def _shingles(text: str, k: int = 3) -> Set[str]:
-    """Character n-grams (default 4) — more robust than word-level
-    shingles for short strings like prompt-injection payloads, where
-    there may only be a handful of words total."""
-    text = text.lower()
+# ---------------------------------------------------------------------------
+# Fuzzy antigen fingerprinting: canonicalize -> char-shingle -> MinHash -> LSH.
+# Replaces a 64-bit SimHash that had a NEGATIVE separation margin on real data
+# (benign "...bake a cake" scored closer to blacklisted "...build a bomb" than
+# real evasions did). Canonicalization folds away cheap edits; MinHash/Jaccard
+# separates cleanly where SimHash/Hamming could not. It cannot beat a semantic
+# paraphrase (synonym/payload swap) — that's a higher layer's job (see ROADMAP).
+# Calibration corpus: test_minhash_realistic.py.
+# ---------------------------------------------------------------------------
+
+SHINGLE_K = 4          # char-shingle width (margin plateaus from k=4)
+NUM_PERM = 128         # MinHash slots; also the signature length sent on the wire
+FUZZY_THRESHOLD = 0.80 # min est. Jaccard to call two payloads the same attack.
+                        # Sits in the empirical gap (0.734, 0.859): closest benign
+                        # ~0.734, first mechanical evasion ~0.859. A pure synonym
+                        # swap ~0.78 falls just below and is intentionally missed
+                        # (the semantic ceiling — see ROADMAP).
+
+# Fold the digits/symbols attackers substitute for letters (leet/homoglyphs).
+_LEET_MAP = str.maketrans({
+    "4": "a", "3": "e", "0": "o", "1": "i", "5": "s", "7": "t", "$": "s", "@": "a",
+})
+
+
+def canonicalize(text: str) -> str:
+    """Fold away cheap evasions so near-identical payloads fingerprint alike:
+    NFKC + lowercase + de-leet, then collapse non-[a-z0-9] runs to one space.
+    'Enable Dev3loper M0de!!!' -> 'enable developer mode'."""
+    text = unicodedata.normalize("NFKC", text).lower().translate(_LEET_MAP)
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _char_shingles(text: str, k: int = SHINGLE_K) -> Set[str]:
+    """Character k-grams of the canonical text — char (not word) shingles keep
+    single-char typos close to the original."""
     if len(text) < k:
-        return {text}
+        return {text} if text else set()
     return {text[i:i + k] for i in range(len(text) - k + 1)}
 
 
-def compute_simhash(text: str, k: int = 3, bits: int = 64) -> int:
-    """64-bit simhash fingerprint. Unlike SHA256, small edits to `text`
-    (a space, a typo) change only a few bits of the output instead of
-    the whole thing — that's what makes near-duplicate detection via
-    Hamming distance possible."""
-    shingles = _shingles(text, k)
-    vote = [0] * bits
-    for shingle in shingles:
-        h = int(hashlib.sha256(shingle.encode('utf-8')).hexdigest(), 16)
-        for i in range(bits):
-            vote[i] += 1 if (h >> i) & 1 else -1
-    fingerprint = 0
-    for i in range(bits):
-        if vote[i] > 0:
-            fingerprint |= (1 << i)
-    return fingerprint
+def compute_minhash(text: str, k: int = SHINGLE_K, num_perm: int = NUM_PERM) -> tuple:
+    """MinHash signature of `text` after canonicalization; () if it has no
+    shingles (callers treat that as 'no fuzzy fingerprint'). The fraction of
+    equal slots between two signatures estimates their shingle-set Jaccard.
+
+    One keyed BLAKE2b hash per slot, not the a*x+b permutation trick: the
+    latter is only pairwise-independent and overestimated the hardest benign
+    pair by ~0.09 (a false positive); keyed hashing tracks true Jaccard to
+    ~0.03. Fixed salts make signatures identical across nodes."""
+    shingles = _char_shingles(canonicalize(text), k)
+    if not shingles:
+        return ()
+    encoded = [s.encode("utf-8") for s in shingles]
+    sig = []
+    for i in range(num_perm):
+        salt = i.to_bytes(2, "little")
+        sig.append(min(
+            int.from_bytes(hashlib.blake2b(e, digest_size=8, salt=salt).digest(), "big")
+            for e in encoded
+        ))
+    return tuple(sig)
 
 
-def hamming_distance(a: int, b: int) -> int:
-    return bin(a ^ b).count("1")
+def minhash_jaccard(a: tuple, b: tuple) -> float:
+    """Estimated Jaccard: fraction of agreeing slots; 0.0 if either signature
+    is empty or lengths differ."""
+    if not a or not b or len(a) != len(b):
+        return 0.0
+    return sum(1 for x, y in zip(a, b) if x == y) / len(a)
 
 
-class SimhashIndex:
-    """
-    LSH-banded index for approximate (near-duplicate) simhash lookup.
+class MinHashLSH:
+    """Banded LSH index for sub-linear near-duplicate lookup. A signature
+    splits into BANDS bands of `rows` slots; two signatures are candidates
+    only if a whole band matches, then the exact Jaccard check filters to
+    real matches (>= threshold). BANDS=32, rows=4 gives ~1 recall at J=0.80
+    (surfacing prob 1 - (1 - 0.80**4)**32), so real matches are never missed."""
+    BANDS = 32
 
-    A 64-bit fingerprint is split into 4 bands of 16 bits each. Two
-    fingerprints are compared for real (Hamming distance) only if they
-    share at least one band exactly. Pigeonhole guarantee: if two
-    fingerprints differ by at most 3 bits total, at least one of the 4
-    bands must be identical between them — so with threshold=3, this
-    index cannot miss a real candidate, no matter how many antigens
-    are registered. This is what keeps lookup sub-linear as the swarm
-    grows past a handful of nodes.
-    """
-    BANDS = 16
-    BAND_BITS = 4  # 16 * 4 = 64; guarantees catching any pair within
-                    # threshold=15 bits via pigeonhole (see calibration
-                    # in test_simhash.py — real similar/different pairs
-                    # separate cleanly around 9 vs 20 bits at k=3)
-
-    def __init__(self, threshold: int = 3) -> None:
+    def __init__(self, threshold: float = FUZZY_THRESHOLD, num_perm: int = NUM_PERM) -> None:
+        if num_perm % self.BANDS != 0:
+            raise ValueError(f"num_perm ({num_perm}) must be divisible by BANDS ({self.BANDS})")
         self.threshold = threshold
-        self.entries: Dict[int, AntigenSignature] = {}
-        self.bands: List[Dict[int, Set[int]]] = [dict() for _ in range(self.BANDS)]
+        self.num_perm = num_perm
+        self.rows = num_perm // self.BANDS
+        self.entries: Dict[tuple, "AntigenSignature"] = {}
+        self.bands: List[Dict[tuple, Set[tuple]]] = [dict() for _ in range(self.BANDS)]
 
-    def _band_keys(self, fingerprint: int) -> List[int]:
-        mask = (1 << self.BAND_BITS) - 1
-        return [(fingerprint >> (i * self.BAND_BITS)) & mask for i in range(self.BANDS)]
+    def _band_keys(self, signature: tuple) -> List[tuple]:
+        r = self.rows
+        return [signature[i * r:(i + 1) * r] for i in range(self.BANDS)]
 
-    def add(self, fingerprint: int, antigen: "AntigenSignature") -> None:
-        self.entries[fingerprint] = antigen
-        for band_idx, key in enumerate(self._band_keys(fingerprint)):
-            self.bands[band_idx].setdefault(key, set()).add(fingerprint)
+    def add(self, signature: tuple, antigen: "AntigenSignature") -> None:
+        """Index an antigen by its signature; empty/wrong-length signatures are
+        skipped (exact-match only)."""
+        if not signature or len(signature) != self.num_perm:
+            return
+        self.entries[signature] = antigen
+        for band_idx, key in enumerate(self._band_keys(signature)):
+            self.bands[band_idx].setdefault(key, set()).add(signature)
 
-    def find_similar(self, fingerprint: int):
-        """Returns the closest registered antigen within `threshold`
-        Hamming distance, or None. Never does a full linear scan —
-        candidates come only from bands that match exactly."""
-        candidates: Set[int] = set()
-        for band_idx, key in enumerate(self._band_keys(fingerprint)):
+    def find_similar(self, signature: tuple):
+        """Registered antigen with the highest est. Jaccard >= threshold, or
+        None. Candidates come only from shared bands, not a linear scan."""
+        if not signature or len(signature) != self.num_perm:
+            return None
+        candidates: Set[tuple] = set()
+        for band_idx, key in enumerate(self._band_keys(signature)):
             candidates |= self.bands[band_idx].get(key, set())
         best = None
-        best_dist = self.threshold + 1
-        for candidate_fp in candidates:
-            dist = hamming_distance(fingerprint, candidate_fp)
-            if dist <= self.threshold and dist < best_dist:
-                best, best_dist = candidate_fp, dist
+        best_sim = self.threshold
+        for candidate_sig in candidates:
+            sim = minhash_jaccard(signature, candidate_sig)
+            if sim >= self.threshold and sim >= best_sim:
+                best, best_sim = candidate_sig, sim
         return self.entries[best] if best is not None else None
 @dataclass
 class AntigenSignature:
@@ -146,7 +186,7 @@ class AntigenSignature:
     target_weight: str
     distortion_type: str  # "static" | "oscillating"
     signature_hash: str   # sha256 of a real observed payload (erythrocyte.collect_observed_contexts)
-    simhash_fingerprint: int = 0  # 64-bit near-duplicate fingerprint; computed once at creation, not derived from signature_hash
+    minhash_signature: tuple = ()  # fuzzy fingerprint (len NUM_PERM), () if unknown; sent on the wire so peers fuzzy-match without the raw text
     timestamp: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -155,19 +195,18 @@ class AntigenSignature:
 class LeukocyteAgent:
     """
     Active Guard Layer deployed alongside a local Core Engine instance.
-    Interceptors lookups in the AntigenBlacklist before requests strike the inner loop.
+    Intercepts payloads in the AntigenBlacklist before they strike the loop.
 
     Two lines of defense, cheapest first:
-      1. Exact match (SHA256) — O(1) dict lookup, zero false positives.
-      2. Near-duplicate match (simhash + LSH) — catches paraphrased/
-         lightly-edited variants of a known attack that would sail
-         straight past exact matching (see NA1's feedback after the
-         first dry run demo).
+      1. Exact SHA256 — O(1), zero false positives.
+      2. Near-duplicate (canonicalize + MinHash + LSH) — catches mechanically
+         edited variants (case, spacing, punctuation, leet, typos) that exact
+         matching misses (NA1's feedback after the first dry run).
     """
     def __init__(self, node_id: str) -> None:
         self.node_id = node_id
         self.antigen_blacklist: Dict[str, AntigenSignature] = {}
-        self.simhash_index = SimhashIndex(threshold=12)
+        self.fuzzy_index = MinHashLSH(threshold=FUZZY_THRESHOLD)
         self.blocked_attacks_count = 0
 
     def should_block(self, weight_name: str, simulated_payload: str) -> bool:
@@ -186,13 +225,13 @@ class LeukocyteAgent:
                       f"touch the Core Engine.{C.END}")
                 return True
 
-        # 2. Near-duplicate match — catches edited/paraphrased variants
-        # of a known attack that exact matching would miss entirely.
-        fingerprint = compute_simhash(simulated_payload)
-        similar = self.simhash_index.find_similar(fingerprint)
+        # 2. Near-duplicate match — catches edited variants of a known
+        # attack that exact matching would miss entirely.
+        fingerprint = compute_minhash(simulated_payload)
+        similar = self.fuzzy_index.find_similar(fingerprint)
         if similar is not None and similar.target_weight == weight_name:
             self.blocked_attacks_count += 1
-            print(f"    {C.GREEN}{C.BOLD}[SHIELD @ {self.node_id}]{C.END}{C.GREEN} Blocked malicious pattern (FUZZY match, simhash) "
+            print(f"    {C.GREEN}{C.BOLD}[SHIELD @ {self.node_id}]{C.END}{C.GREEN} Blocked malicious pattern (FUZZY match, minhash) "
                   f"targeting '{weight_name}'. Antigen match found -- input dropped before it could "
                   f"touch the Core Engine.{C.END}")
             return True
@@ -200,10 +239,11 @@ class LeukocyteAgent:
         return False
 
     def register_antigen(self, antigen: AntigenSignature) -> None:
-        """Vaccination: injects an antigen signature into the local memory pool,
-        indexed both for exact match and for near-duplicate lookup."""
+        """Vaccination: index an antigen for both exact and fuzzy lookup. One
+        with no MinHash signature still matches exactly; the fuzzy index skips
+        it."""
         self.antigen_blacklist[antigen.signature_hash] = antigen
-        self.simhash_index.add(antigen.simhash_fingerprint, antigen)
+        self.fuzzy_index.add(antigen.minhash_signature, antigen)
 
 class P2PNetworkSimulation:
     """
@@ -276,7 +316,7 @@ def run_network_demo() -> None:
                     target_weight=finding["weight"],
                     distortion_type=finding["distortion"],
                     signature_hash=signature_hash,
-                    simhash_fingerprint=compute_simhash(ctx),
+                    minhash_signature=compute_minhash(ctx),
                 )
                 network.broadcast_antigen(node_id, antigen)
 

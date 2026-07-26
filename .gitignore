@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 venv/
+.venv/
 node_tokens.json
 relay_logs/
 *.jsonl

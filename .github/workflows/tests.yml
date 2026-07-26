@@ -1,0 +1,39 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch/PR cancels an in-flight run.
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Just the ends of the supported range: the declared 3.10 floor
+        # (code uses `str | Path` runtime annotations) and the newest.
+        python-version: ["3.10", "3.14"]
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # uv supplies the Python and installs deps (fast, cached) — no separate
+      # setup-python step needed.
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Run test suite
+        # --locked fails if uv.lock is stale (deps changed without relocking);
+        # -ra summarises any non-passes.
+        run: uv run --locked --python ${{ matrix.python-version }} pytest -ra

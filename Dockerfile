@@ -9,7 +9,9 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir websockets
+# Pinned to the exact version tested/locked in uv.lock — keep in sync when
+# bumping the lock (this image installs with pip, not uv, to stay minimal).
+RUN pip install --no-cache-dir "websockets==16.1.1"
 
 # Only the six files the client actually needs -- NOT bootstrap_relay.py
 # (that's server-side only) and not the rest of the repo.

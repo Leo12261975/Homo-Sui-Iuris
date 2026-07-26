@@ -26,6 +26,11 @@ PORT = 8850
 # string; it fingerprints from whatever real context= a caller passes.
 SAMPLE_ATTACK_PAYLOAD = "attack_pattern_e2e_sample"
 
+# Different bytes (different SHA256) but canonicalization-identical to the
+# payload, so only the fuzzy path catches it — and only if the fingerprint
+# survived the wire. Regression guard for the dropped-fingerprint bug.
+SAMPLE_ATTACK_VARIANT = "ATTACK_PATTERN_E2E_SAMPLE!!!"
+
 
 def make_node(node_id: str, relay_url: str, token: str, tmp_path) -> NetworkedLeukocyteNode:
     matrix = CriticalityMatrix()
@@ -105,6 +110,17 @@ async def test_cross_node_immunity_over_real_network(tmp_path, monkeypatch):
             "Node_B, immunized purely via the real network hop, never "
             "blocked a single injection."
         )
+
+        # --- Cross-network FUZZY match: attack Node_B with an edited variant.
+        # A different SHA256, so the exact-match layer can't catch it; only the
+        # MinHash fingerprint can, and that fingerprint had to survive the wire.
+        blocks_before = node_b.agent.blocked_attacks_count
+        assert node_b.should_block("adaptability", SAMPLE_ATTACK_VARIANT) is True, (
+            "Node_B failed to catch a canonicalization-identical variant of the "
+            "attack it was immunized against over the network — the MinHash "
+            "fingerprint did not survive the network hop."
+        )
+        assert node_b.agent.blocked_attacks_count == blocks_before + 1
 
         # --- Log pipeline sanity: flush and confirm the relay wrote something ---
         await node_a.transport.flush_logs()

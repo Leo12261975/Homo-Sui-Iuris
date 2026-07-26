@@ -52,7 +52,7 @@ from core_engine import (
     UpdateLoop,
     Weight,
 )
-from leukocyte_protocol import AntigenSignature, LeukocyteAgent
+from leukocyte_protocol import AntigenSignature, LeukocyteAgent, compute_minhash
 from node_transport import AuthenticationError, NodeTransport
 
 log = logging.getLogger("networked_node")
@@ -168,6 +168,9 @@ class NetworkedLeukocyteNode:
             target_weight=payload.get("target_weight", ""),
             distortion_type=payload.get("distortion_type", ""),
             signature_hash=payload.get("signature_hash", ""),
+            # Fingerprint arrives as a JSON list; back to a tuple. Missing -> ()
+            # -> this antigen is exact-match only.
+            minhash_signature=tuple(payload.get("minhash_signature") or ()),
         )
         self.agent.register_antigen(antigen)
         self.transport.queue_log({
@@ -211,6 +214,7 @@ class NetworkedLeukocyteNode:
                 target_weight=finding["weight"],
                 distortion_type=finding["distortion"],
                 signature_hash=signature_hash,
+                minhash_signature=compute_minhash(ctx),
             )
             # Self-vaccinate synchronously — mirrors the in-process
             # broadcast_antigen()'s self-vaccination step. This does NOT
@@ -239,6 +243,9 @@ class NetworkedLeukocyteNode:
                 "target_weight": antigen.target_weight,
                 "distortion_type": antigen.distortion_type,
                 "signature_hash": antigen.signature_hash,
+                # Fuzzy fingerprint (lossy MinHash, not the raw text) so peers
+                # catch edited variants, not just verbatim replays. Tuple->list.
+                "minhash_signature": list(antigen.minhash_signature),
             })
         except Exception:
             # If the relay connection is mid-reconnect, this antigen is
