@@ -1,0 +1,4 @@
+# Runtime dependencies for the Free Cognitive Protocol node/relay.
+# Everything else the code needs (hashlib, asyncio, dataclasses, secrets,
+# uuid, ...) is in the Python standard library.
+websockets>=12

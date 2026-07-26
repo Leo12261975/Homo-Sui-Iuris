@@ -1,0 +1,5 @@
+# Test/dev dependencies. Install with:  pip install -r requirements-dev.txt
+-r requirements.txt
+
+pytest>=8
+pytest-asyncio>=0.24   # the network/relay tests are async (@pytest.mark.asyncio)

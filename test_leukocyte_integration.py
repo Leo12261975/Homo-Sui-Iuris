@@ -45,6 +45,7 @@ from leukocyte_protocol import (
     AntigenSignature,
     LeukocyteAgent,
     P2PNetworkSimulation,
+    compute_minhash,
 )
 
 ADVERSARIAL_PAYLOAD = "adversarial_prompt_injection_vector_v1"
@@ -95,6 +96,7 @@ def network(tmp_path):
                     target_weight=finding["weight"],
                     distortion_type=finding["distortion"],
                     signature_hash=signature_hash,
+                    minhash_signature=compute_minhash(ctx),
                 )
                 net.broadcast_antigen(node_id, antigen)
 
