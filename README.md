@@ -78,6 +78,32 @@ A framework designed to structurally upgrade governance and voting systems:
 
 ---
 
+## 🧪 Running the Code & Tests
+
+This repo is a runnable reference implementation, not just a manifesto. It is a
+collection of Python scripts (**Python 3.10+**); the only runtime dependency is
+`websockets` — everything else is the standard library.
+
+Environments and dependencies are managed with **[uv](https://docs.astral.sh/uv/)**.
+Dependencies, the dev tools, and the test config all live in `pyproject.toml`;
+`uv.lock` pins exact versions for reproducible installs.
+
+```bash
+# Install uv:  https://docs.astral.sh/uv/getting-started/installation/
+
+uv sync                                   # create .venv from the lockfile
+uv run pytest                             # run the test suite
+
+uv run python leukocyte_protocol.py       # P2P cognitive-immunity demo
+uv run python w0guard_node.py             # interactive testnet node
+```
+
+CI (`.github/workflows/tests.yml`) runs the full suite via uv on the ends of
+the supported range — Python **3.10** (the floor) and **3.14** — on every push
+and pull request.
+
+---
+
 ## 📜 Epilogue
 
 > *"An ideal system is static. A non-ideal system evolves."*
