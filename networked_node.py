@@ -85,6 +85,8 @@ class NetworkedLeukocyteNode:
         on_disconnected: Optional[Any] = None,
         on_reconnecting: Optional[Any] = None,
         on_reconnected: Optional[Any] = None,
+        threat_judge: Optional[Any] = None,
+        judge_drain_timeout: float = 90.0,
     ) -> None:
         self.node_id = node_id
         self.transport = NodeTransport(relay_url, node_id, token)
@@ -108,6 +110,14 @@ class NetworkedLeukocyteNode:
         self._on_disconnected = on_disconnected
         self._on_reconnecting = on_reconnecting
         self._on_reconnected = on_reconnected
+        # Optional advisory AI second opinion (see threat_judge.py). None =>
+        # judging disabled; the deterministic block/register path is unchanged
+        # either way. Verdicts are logged, never used to gate blocking.
+        self._threat_judge = threat_judge
+        self._judge_drain_timeout = judge_drain_timeout
+        # In-flight judge tasks — drained on close() so a slow AI verdict still
+        # gets flushed instead of being cut off mid-call.
+        self._judge_tasks: "set[asyncio.Task]" = set()
         self._run_forever_task: Optional[asyncio.Task] = None
 
     async def connect(self) -> None:
@@ -148,7 +158,28 @@ class NetworkedLeukocyteNode:
             f"[{self.node_id}] no successful handshake with relay within {self._connect_timeout}s"
         )
 
+    async def drain_judge_tasks(self, timeout: Optional[float] = None) -> None:
+        """Wait (bounded) for in-flight advisory judge tasks to finish so their
+        verdicts get queued. Each task is itself bounded by the judge's own
+        request timeout, so this can only ever wait a little past that."""
+        if not self._judge_tasks:
+            return
+        timeout = self._judge_drain_timeout if timeout is None else timeout
+        try:
+            await asyncio.wait(set(self._judge_tasks), timeout=timeout)
+        except Exception:  # never let cleanup raise
+            log.exception("[%s] error draining judge tasks", self.node_id)
+
     async def close(self) -> None:
+        # Let any in-flight AI judges finish and queue their verdicts, then
+        # flush WHILE still connected — the post-disconnect flush below is a
+        # no-op once the socket is gone, so this is the send that actually
+        # delivers late verdicts.
+        await self.drain_judge_tasks()
+        try:
+            await self.transport.flush_logs()
+        except Exception:
+            pass
         if self._run_forever_task is not None:
             self._run_forever_task.cancel()
             try:
@@ -179,6 +210,8 @@ class NetworkedLeukocyteNode:
             "target_weight": antigen.target_weight,
         })
         log.info("[%s] received antigen for '%s' over network", self.node_id, antigen.target_weight)
+        # Advisory: score the freshly-learned antigen (no-op if no judge).
+        self._judge_and_log(payload)
 
     # ------------------------------------------------------------------
     # Outbound: local oscillating finding -> self-vaccinate + broadcast
@@ -231,6 +264,18 @@ class NetworkedLeukocyteNode:
                 "node_id": self.node_id,
                 "target_weight": antigen.target_weight,
             })
+            # Advisory: score the antigen we just raised (no-op if no judge).
+            # `sample_text` is the RAW observed prompt — given to the judge
+            # locally so it can assess actual content (jailbreak text, etc.),
+            # but NOT part of the broadcast payload above and NOT logged (see
+            # Verdict.as_log_entry): the raw text never leaves this node.
+            self._judge_and_log({
+                "target_weight": antigen.target_weight,
+                "distortion_type": antigen.distortion_type,
+                "signature_hash": antigen.signature_hash,
+                "minhash_signature": list(antigen.minhash_signature),
+                "sample_text": ctx,
+            })
 
         log.info(
             "[%s] local oscillating finding on '%s' -> self-vaccinated + broadcasting %d real antigen(s)",
@@ -254,6 +299,35 @@ class NetworkedLeukocyteNode:
             # only delays other nodes learning about it, and the next
             # oscillation (if the attack repeats) will try again.
             log.exception("[%s] failed to broadcast antigen for '%s'", self.node_id, antigen.target_weight)
+
+    # ------------------------------------------------------------------
+    # Advisory: optional AI threat-level second opinion on a signature
+    # ------------------------------------------------------------------
+    def _judge_and_log(self, signature: Dict[str, Any]) -> None:
+        """Fire-and-forget: if a judge is configured, score `signature` off
+        the event loop and queue the verdict as a log entry. Purely advisory —
+        it never gates should_block()/register_antigen()."""
+        if self._threat_judge is None:
+            return
+        task = asyncio.create_task(self._run_judge(signature))
+        self._judge_tasks.add(task)
+        task.add_done_callback(self._judge_tasks.discard)
+
+    async def _run_judge(self, signature: Dict[str, Any]) -> None:
+        try:
+            # judge() may do blocking I/O (HTTP to OpenRouter / a local model)
+            # — run it in a thread so it never stalls the relay session loop.
+            loop = asyncio.get_running_loop()
+            verdict = await loop.run_in_executor(None, self._threat_judge.judge, signature)
+        except Exception:
+            log.exception("[%s] threat judge raised for '%s'", self.node_id, signature.get("target_weight"))
+            return
+        self.transport.queue_log(verdict.as_log_entry(self.node_id, signature))
+        log.info(
+            "[%s] threat verdict for '%s': %s (score=%.2f) via %s%s",
+            self.node_id, signature.get("target_weight"), verdict.threat_level,
+            verdict.score, verdict.source, " [degraded]" if verdict.degraded else "",
+        )
 
     # ------------------------------------------------------------------
     # Local attack surface: what a driving script calls per simulated step

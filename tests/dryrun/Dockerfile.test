@@ -1,0 +1,27 @@
+# W0Guard automated dry-run image (test harness ONLY — not the shipped client).
+#
+# Unlike the production Dockerfile (minimal client, deliberately excludes the
+# server), this image bundles everything the multi-node dry run needs — relay,
+# node driver, and verifier — because docker-compose.test.yml runs all three
+# roles from one image, selecting the role per service via `command:`.
+#
+# BUILD CONTEXT IS THE REPO ROOT (the compose file sets context: ../..), so the
+# COPY paths below are repo-relative: root modules by bare name, harness files
+# under tests/dryrun/. Everything flattens into /app.
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Same pinned single dependency as the production image (uv.lock: 16.1.1).
+RUN pip install --no-cache-dir "websockets==16.1.1"
+
+# Root modules: relay, node stack, and the optional AI threat judge.
+COPY bootstrap_relay.py w0guard_node.py networked_node.py node_transport.py \
+     core_engine.py leukocyte_protocol.py erythrocyte.py threat_judge.py ./
+
+# Test-harness roles (relay entrypoint, headless node, verifier) + test tokens.
+COPY tests/dryrun/testnet_relay_entry.py tests/dryrun/testnet_node_driver.py \
+     tests/dryrun/verify_dry_run.py tests/dryrun/node_tokens.test.json ./
+
+# Default role is a node; the relay and verifier services override `command:`.
+CMD ["python3", "testnet_node_driver.py"]
