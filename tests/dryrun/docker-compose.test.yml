@@ -1,0 +1,138 @@
+# Automated multi-node dry run — reproduces DRY_RUN_2026_07_18 unattended and
+# closes its documented gap ("relay to N>1 node" was untested with only 2
+# testers online). One relay + three independent node containers (1 attacker,
+# 2 listeners) + an auditor that reads the relay's logs and passes/fails.
+#
+# Run it with the helper script (recommended):
+#     tests/dryrun/run_dry_run_test.sh
+# or directly (compose v2.20+ for `wait`):
+#     docker compose -f tests/dryrun/docker-compose.test.yml up -d --build
+#     docker compose -f tests/dryrun/docker-compose.test.yml wait verifier
+#
+# NOTE: no service publishes a host port — the relay is reachable only on the
+# compose-internal bridge, which is why testnet_relay_entry.py binding 0.0.0.0
+# is safe here (see that file).
+name: w0guard-dryrun
+
+# Shared config for the three node containers. `x-` keys are compose
+# extensions (ignored as services); the anchors below pull them into each node.
+x-node: &node
+  build:
+    context: ../..
+    dockerfile: tests/dryrun/Dockerfile.test
+  depends_on:
+    relay:
+      condition: service_healthy
+  restart: "no"
+  # Lets a node reach an LLM judge running on the host — e.g. the user's
+  # llm-queue (OpenAI-compatible, fronting Ollama) on :11500, or Ollama's own
+  # :11434 — via HSI_JUDGE_BASE_URL=http://host.docker.internal:11500/v1.
+  # `host-gateway` is what makes host.docker.internal resolve on Linux.
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+
+x-node-env: &node-env
+  HSI_RELAY_URL: ws://relay:8765
+  HSI_ATTACK_DELAY: "${HSI_ATTACK_DELAY:-8}"
+  HSI_RUN_SECONDS: "${HSI_RUN_SECONDS:-25}"
+  # Attack payloads (the raw prompts injected as attack context). Empty => the
+  # default synthetic payload; '||'-separated => several realistic jailbreak
+  # prompts, each fingerprinted and judged separately (LLM-judge scenario).
+  HSI_ATTACK_PAYLOADS: "${HSI_ATTACK_PAYLOADS:-}"
+  # Under compose the verifier is the authoritative judge, so a node's soft
+  # self-check never blocks it via service_completed_successfully (see driver).
+  HSI_STRICT: "0"
+  # AI threat judge — off by default; pass these from the environment (the run
+  # script forwards them) to point at OpenRouter or a local OpenAI endpoint.
+  HSI_THREAT_JUDGE: "${HSI_THREAT_JUDGE:-off}"
+  HSI_JUDGE_BASE_URL: "${HSI_JUDGE_BASE_URL:-}"
+  HSI_JUDGE_MODEL: "${HSI_JUDGE_MODEL:-}"
+  HSI_JUDGE_API_KEY: "${HSI_JUDGE_API_KEY:-}"
+  HSI_JUDGE_TIMEOUT: "${HSI_JUDGE_TIMEOUT:-20}"
+  HSI_JUDGE_DRAIN_TIMEOUT: "${HSI_JUDGE_DRAIN_TIMEOUT:-90}"
+
+services:
+  relay:
+    build:
+      context: ../..
+      dockerfile: tests/dryrun/Dockerfile.test
+    container_name: dryrun_relay
+    command: ["python3", "testnet_relay_entry.py"]
+    environment:
+      HSI_RELAY_HOST: "0.0.0.0"        # bridge-internal only; nothing is published
+      HSI_RELAY_PORT: "8765"
+      HSI_TOKENS_FILE: node_tokens.test.json
+      HSI_RELAY_LOG_DIR: /relay_logs
+    volumes:
+      - relay_logs:/relay_logs
+    healthcheck:
+      # No curl in python:slim — a raw TCP connect proves the socket is up.
+      test: ["CMD", "python3", "-c", "import socket; socket.create_connection(('127.0.0.1', 8765), timeout=2).close()"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 2s
+
+  node_a:
+    <<: *node
+    container_name: dryrun_node_a
+    command: ["python3", "testnet_node_driver.py"]
+    environment:
+      <<: *node-env
+      HSI_NODE_ID: Node_A
+      HSI_NODE_TOKEN: dryrun-test-token-A-not-a-secret
+      HSI_ROLE: attacker
+
+  node_b:
+    <<: *node
+    container_name: dryrun_node_b
+    command: ["python3", "testnet_node_driver.py"]
+    environment:
+      <<: *node-env
+      HSI_NODE_ID: Node_B
+      HSI_NODE_TOKEN: dryrun-test-token-B-not-a-secret
+      HSI_ROLE: listener
+      # Listeners judge inbound antigens only if asked (default off): inbound
+      # antigens carry no prompt text, so this just adds model load. Keeps the
+      # LLM-judge scenario pointed at the attacker's real prompts.
+      HSI_THREAT_JUDGE: "${HSI_LISTENER_JUDGE:-off}"
+
+  node_c:
+    <<: *node
+    container_name: dryrun_node_c
+    command: ["python3", "testnet_node_driver.py"]
+    environment:
+      <<: *node-env
+      HSI_NODE_ID: Node_C
+      HSI_NODE_TOKEN: dryrun-test-token-C-not-a-secret
+      HSI_ROLE: listener
+      HSI_THREAT_JUDGE: "${HSI_LISTENER_JUDGE:-off}"
+
+  verifier:
+    build:
+      context: ../..
+      dockerfile: tests/dryrun/Dockerfile.test
+    container_name: dryrun_verifier
+    command: ["python3", "verify_dry_run.py"]
+    depends_on:
+      # Runs only after every node has finished its window and flushed its logs.
+      node_a:
+        condition: service_completed_successfully
+      node_b:
+        condition: service_completed_successfully
+      node_c:
+        condition: service_completed_successfully
+    restart: "no"
+    environment:
+      HSI_RELAY_LOG_DIR: /relay_logs
+      HSI_ATTACKER_ID: Node_A
+      HSI_LISTENER_IDS: Node_B,Node_C
+      HSI_MIN_RECIPIENTS: "2"           # the whole point: fan-out to N>1
+      HSI_EXPECT_JUDGE: "${HSI_EXPECT_JUDGE:-0}"
+      HSI_MIN_THREAT_LEVEL: "${HSI_MIN_THREAT_LEVEL:-benign}"
+      HSI_VERIFY_TIMEOUT: "25"
+    volumes:
+      - relay_logs:/relay_logs
+
+volumes:
+  relay_logs:

@@ -35,5 +35,21 @@ jobs:
 
       - name: Run test suite
         # --locked fails if uv.lock is stale (deps changed without relocking);
-        # -ra summarises any non-passes.
+        # -ra summarises any non-passes. The Docker dry run is opt-in
+        # (HSI_RUN_DOCKER_TESTS) and skipped here — it has its own job below.
         run: uv run --locked --python ${{ matrix.python-version }} pytest -ra
+
+  # Faithful end-to-end reproduction of DRY_RUN_2026_07_18: real relay + 3 node
+  # containers + verifier, asserting antigen fan-out to N>1 recipients. Separate
+  # from the fast pytest matrix because it builds an image and takes ~1–2 min.
+  docker-dryrun:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Multi-node dry run (docker compose)
+        # The AI threat judge stays off in CI (no model endpoint) — the
+        # heuristic path and fan-out are what this job proves.
+        run: bash tests/dryrun/run_dry_run_test.sh
+
+      - name: Reconnect across relay restart (docker compose)
+        run: bash tests/dryrun/run_reconnect_test.sh

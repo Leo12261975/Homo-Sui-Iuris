@@ -51,6 +51,7 @@ this process will be reachable from the real internet, via Caddy):
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import sys
@@ -77,6 +78,10 @@ DEFAULT_LOG_DIR = "relay_logs"
 DEFAULT_TOKENS_FILE = "node_tokens.json"
 MAX_MESSAGE_BYTES = 64 * 1024
 HANDSHAKE_TIMEOUT_SECONDS = 10
+# Antigens the relay remembers so a node that connects (or reconnects) after a
+# broadcast still catches up — see Relay._sync_known_antigens. Bounded so one
+# long-lived relay can't grow this without limit; oldest are evicted first.
+MAX_KNOWN_ANTIGENS = 10_000
 
 
 def load_node_tokens(path: str = DEFAULT_TOKENS_FILE) -> Dict[str, str]:
@@ -110,6 +115,12 @@ class Relay:
     def __init__(self, node_tokens: Dict[str, str], log_dir: str = DEFAULT_LOG_DIR) -> None:
         self.node_tokens = node_tokens
         self.connections: Dict[str, "websockets.WebSocketServerProtocol"] = {}
+        # State-sync store: every distinct antigen the relay has relayed, keyed
+        # by signature_hash, kept in insertion order (dict is ordered). Replayed
+        # to each node on connect so a disconnected/late node isn't permanently
+        # missing antigens broadcast while it was away. Advisory-only metadata
+        # never lives here — just the antigen payloads nodes already exchange.
+        self.known_antigens: "Dict[str, dict]" = {}
         # Resolved and created here, at instantiation time, not at
         # module-import time -- otherwise the directory ends up wherever
         # the process happened to be when bootstrap_relay.py was first
@@ -125,6 +136,11 @@ class Relay:
                 return
             self.connections[node_id] = ws
             log.info("node connected: %s (%d online)", node_id, len(self.connections))
+            # Bring this node up to date on everything broadcast before it
+            # (re)connected — the "keep nodes in sync" step. Done before the
+            # consume loop so a reconnecting node is immunized again immediately,
+            # not only for attacks that happen after it returns.
+            await self._sync_known_antigens(node_id, ws)
             async for raw in ws:
                 await self._dispatch(node_id, raw)
         except websockets.ConnectionClosed:
@@ -178,6 +194,9 @@ class Relay:
 
     async def _relay_antigen(self, sender_id: str, msg: dict) -> None:
         payload = msg.get("payload", {})
+        # Remember it first — even a broadcast to zero peers must be catch-up-able
+        # by a node that connects later.
+        self._remember_antigen(payload)
         envelope = json.dumps({"type": "antigen", "sender_id": sender_id, "payload": payload})
         targets = [nid for nid in self.connections if nid != sender_id]
         for nid in targets:
@@ -189,6 +208,40 @@ class Relay:
             "relayed antigen from %s to %d node(s) (target_weight=%s)",
             sender_id, len(targets), payload.get("target_weight"),
         )
+
+    def _remember_antigen(self, payload: dict) -> None:
+        """Record an antigen for state sync, de-duplicated by signature_hash
+        (its stable identity — falls back to a hash of the payload if absent).
+        Bounded: the oldest entry is evicted once MAX_KNOWN_ANTIGENS is hit."""
+        key = payload.get("signature_hash")
+        if not isinstance(key, str) or not key:
+            key = "raw:" + hashlib.sha256(
+                json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
+            ).hexdigest()
+        # Re-insert to keep most-recent ordering, then trim from the front.
+        self.known_antigens.pop(key, None)
+        self.known_antigens[key] = payload
+        while len(self.known_antigens) > MAX_KNOWN_ANTIGENS:
+            oldest = next(iter(self.known_antigens))
+            del self.known_antigens[oldest]
+
+    async def _sync_known_antigens(self, node_id: str, ws) -> None:
+        """Replay every remembered antigen to a freshly-connected node as
+        ordinary `antigen` messages. Deliberately reuses the existing antigen
+        wire shape so no client change is needed — a node's normal inbound path
+        registers them exactly like a live broadcast (registration is
+        idempotent, so re-sending ones it already has is harmless)."""
+        if not self.known_antigens:
+            return
+        sent = 0
+        for payload in list(self.known_antigens.values()):
+            envelope = json.dumps({"type": "antigen", "sender_id": "relay-sync", "payload": payload})
+            try:
+                await ws.send(envelope)
+                sent += 1
+            except websockets.ConnectionClosed:
+                return
+        log.info("synced %d known antigen(s) to %s on connect", sent, node_id)
 
     def _write_log_batch(self, sender_id: str, msg: dict) -> None:
         entries = msg.get("payload", [])

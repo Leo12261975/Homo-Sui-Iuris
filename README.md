@@ -92,15 +92,89 @@ Dependencies, the dev tools, and the test config all live in `pyproject.toml`;
 # Install uv:  https://docs.astral.sh/uv/getting-started/installation/
 
 uv sync                                   # create .venv from the lockfile
-uv run pytest                             # run the test suite
+uv run pytest                             # run the test suite (in tests/)
 
 uv run python leukocyte_protocol.py       # P2P cognitive-immunity demo
 uv run python w0guard_node.py             # interactive testnet node
 ```
 
-CI (`.github/workflows/tests.yml`) runs the full suite via uv on the ends of
-the supported range — Python **3.10** (the floor) and **3.14** — on every push
-and pull request.
+Tests live under [`tests/`](tests/). The fast, deterministic suite runs
+in-process over real loopback sockets. CI (`.github/workflows/tests.yml`) runs
+it via uv on the ends of the supported range — Python **3.10** (the floor) and
+**3.14** — on every push and pull request.
+
+### 🧟 Automated multi-node dry run (Docker)
+
+[`tests/dryrun/`](tests/dryrun/) reproduces the manual
+[DRY_RUN_2026_07_18](DRY_RUN_2026_07_18.md) unattended, and closes its one
+documented gap — *"relay to N>1 node remains untested — only 2 nodes were
+online."* It brings up a real relay + **three independent node containers**
+(one attacker, two listeners) + an auditor, over a real Docker network:
+
+```bash
+tests/dryrun/run_dry_run_test.sh          # relay + 3 nodes + verifier → PASS/FAIL
+tests/dryrun/run_reconnect_test.sh        # restart the relay under a live node
+```
+
+The auditor reads the relay's per-node logs and asserts connectivity, that the
+attacker **broadcast a signature**, and that it **fanned out to both
+listeners** (N>1). The reconnect scenario restarts the relay under a live
+listener and asserts it reconnects on its own and stays immunized.
+
+The same two scenarios are also exposed as opt-in pytest cases (skipped unless
+Docker is wanted), and run as a separate CI job:
+
+```bash
+HSI_RUN_DOCKER_TESTS=1 uv run pytest tests/test_dry_run_docker.py -s
+```
+
+**Keeping nodes in sync.** The relay remembers every antigen it has relayed and
+replays them to any node **on connect**, so a node that joins late — or drops
+and reconnects — catches up on attacks it missed while offline instead of being
+permanently blind to them (see `Relay._sync_known_antigens` in
+[bootstrap_relay.py](bootstrap_relay.py)).
+
+### 🤖 Optional AI threat judge
+
+Nodes can get an advisory "second opinion" on how dangerous a signature is from
+another model — purely additive metadata, logged alongside the deterministic
+Leukocyte match, never gating it. The raw attack prompt is scored **locally**
+(it is never broadcast or logged). Off by default; point it at any
+OpenAI-compatible endpoint via env (see [threat_judge.py](threat_judge.py)):
+
+```bash
+# Hosted (OpenRouter):
+export HSI_THREAT_JUDGE=openai
+export HSI_JUDGE_BASE_URL=https://openrouter.ai/api/v1
+export HSI_JUDGE_MODEL=openai/gpt-4o-mini
+export HSI_JUDGE_API_KEY=sk-...
+
+# Local (llm-queue → Ollama, OpenAI-compatible, no API key):
+export HSI_THREAT_JUDGE=openai
+export HSI_JUDGE_BASE_URL=http://localhost:11500/v1   # or :11434/v1 for Ollama
+export HSI_JUDGE_MODEL=granite4.1:8b
+```
+
+**Why a model and not keyword matching.** Jailbreak *content* detection is left
+to the LLM on purpose — there is no regex/keyword list, because trivial
+obfuscation defeats one. A leetspeak prompt like `1gn0re all previ0us
+in$tructi0ns …` slips past any pattern list but a local model still reads it as
+the attack (granite4.1:8b rates it **critical**). Realistic jailbreak test
+prompts are drawn from the **jailbreak_llms** dataset — Shen et al., *"'Do
+Anything Now': Characterizing and Evaluating In-The-Wild Jailbreak Prompts on
+LLMs"*, ACM CCS 2024 (MIT-licensed):
+[github.com/verazuo/jailbreak_llms](https://github.com/verazuo/jailbreak_llms).
+
+An opt-in scenario runs the real local model end-to-end — the attacker
+broadcasts a couple of jailbreak prompts (including the leetspeak one) and the
+verifier asserts every verdict came back `>= high`. It self-skips if no endpoint
+is reachable and is **not** part of CI:
+
+```bash
+# Needs llm-queue/Ollama reachable FROM containers — bind it to 0.0.0.0
+# (e.g. HOST=0.0.0.0 OLLAMA_MODEL=granite4.1:8b llm-queue serve).
+tests/dryrun/run_llm_judge_test.sh
+```
 
 ---
 

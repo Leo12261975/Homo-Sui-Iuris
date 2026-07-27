@@ -30,5 +30,14 @@ package = false
 # loopback sockets).
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-testpaths = ["."]
+# Tests live under tests/; the modules they import (bootstrap_relay,
+# networked_node, threat_judge, ...) live at the repo root, so put the root
+# on sys.path for collection.
+testpaths = ["tests"]
+pythonpath = ["."]
 python_files = ["test_*.py"]
+# Opt-in marker for the Docker-based multi-node dry run (slow, needs Docker).
+# It's skipped unless HSI_RUN_DOCKER_TESTS=1 — see tests/test_dry_run_docker.py.
+markers = [
+    "docker: end-to-end multi-container dry run; needs Docker, opt-in via HSI_RUN_DOCKER_TESTS=1",
+]
