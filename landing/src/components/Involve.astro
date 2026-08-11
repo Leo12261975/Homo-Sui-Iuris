@@ -56,16 +56,25 @@ const platforms = ["Windows", "Linux", "Docker"];
             Working on something adjacent — semantic immunity, agent safety,
             cognitive integrity? We want to hear from you. We read everything.
           </p>
-          {/* TODO: set the real contact target (email or form) — placeholder per launch decision. */}
-          <span class="textlink textlink--dark is-pending" role="link" aria-disabled="true">
+          {/* Address assembled client-side so it never appears in the static HTML scrapers harvest. */}
+          <a class="textlink textlink--dark" data-contact data-user="hello.w0guard" data-domain="proton.me">
             Get in touch
-            <span class="pending-tag">soon</span>
-          </span>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </a>
         </article>
       </div>
     </div>
   </div>
 </section>
+
+<script>
+  const contact = document.querySelector<HTMLAnchorElement>("a[data-contact]");
+  if (contact) {
+    contact.href = `mailto:${contact.dataset.user}@${contact.dataset.domain}`;
+  }
+</script>
 
 <style>
   .involve {
@@ -174,24 +183,8 @@ const platforms = ["Windows", "Linux", "Docker"];
       border-color var(--dur-fast) var(--ease-out-quart);
   }
   .textlink--dark svg { transition: transform var(--dur-fast) var(--ease-out-quart); }
-  .textlink--dark:hover:not(.is-pending) { gap: 0.6rem; border-bottom-color: var(--gold); }
-  .textlink--dark:hover:not(.is-pending) svg { transform: translate(2px, -2px); }
-
-  .is-pending {
-    color: var(--faint-on-dark);
-    border-bottom-color: oklch(0.8 0.02 85 / 0.12);
-    cursor: default;
-  }
-  .pending-tag {
-    font-family: var(--font-mono);
-    font-size: 0.62rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--faint-on-dark);
-    border: 1px solid oklch(0.8 0.02 85 / 0.16);
-    border-radius: 4px;
-    padding: 0.12rem 0.36rem;
-  }
+  .textlink--dark:hover { gap: 0.6rem; border-bottom-color: var(--gold); }
+  .textlink--dark:hover svg { transform: translate(2px, -2px); }
 
   @media (max-width: 46rem) {
     .involve__grid { grid-template-columns: 1fr; }

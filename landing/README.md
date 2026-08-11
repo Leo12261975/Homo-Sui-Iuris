@@ -56,7 +56,9 @@ only in CI.
 
 ## Open items (see `../lading_docs/`)
 
-- **"Get in touch"** currently renders as a marked placeholder (`soon`). Wire it
-  to a real email/form target in `src/components/Involve.astro`.
+- **"Get in touch"** links to `hello.w0guard@proton.me`. The address is
+  assembled client-side in `src/components/Involve.astro` (from `data-user` /
+  `data-domain`) so it never appears verbatim in the static HTML scrapers
+  harvest — keep it that way if you change the address.
 - The **"Get a token"** self-serve CTA is intentionally omitted for now;
   "Run a node" points to the repo setup guide instead.
