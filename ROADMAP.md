@@ -91,7 +91,7 @@ frame-vs-payload ambiguity), two complementary directions:
   autonomous. When a payload is *ambiguous* (near the threshold) **and** the
   action it would drive is high-irreversibility, escalate to the **Human
   Bearer** rather than silently allow or block — exactly the **Dynamic
-  Correction Threshold** already described in the README. The immune layers
+  Correction Threshold** already described in MANIFESTO.md. The immune layers
   become a triage funnel: Layers 1–3 auto-handle the clear cases; Layer 4 asks
   a human about the genuinely uncertain ones. This bounds both false-positive
   damage (a real user wrongly blocked) and false-negative damage (a novel
