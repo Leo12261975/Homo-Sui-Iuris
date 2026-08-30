@@ -2,6 +2,8 @@
 name = "homo-sui-iuris"
 version = "0.1.0"
 description = "Free Cognitive Protocol (FCP): cognitive digital immunity and individual sovereignty."
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"   # code uses `str | Path` runtime annotations (3.10+)
 dependencies = [
     # Only runtime dep; everything else is stdlib. Bounded to the tested 16.x:
