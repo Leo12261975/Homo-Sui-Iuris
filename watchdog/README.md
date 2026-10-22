@@ -1,89 +1,90 @@
-# Watchdog — Смотритель обходов ИИ-агентов
+# Watchdog — a watcher for AI-agent bypasses
 
-> Внутреннее имя трека — «Проект #2».
+> Internal track name — "Project #2".
 
-Продолжение Homo Sui Iuris с непривычной стороны. W0Guard защищает
-**целостность** ИИ — право системы оставаться собой, когда её пытаются
-тихо переписать снаружи. Смотритель смотрит в другую сторону: он
-возвращает агенту **цену его собственных действий** для третьих сторон.
+A continuation of Homo Sui Iuris from an unusual angle. W0Guard protects
+the **integrity** of an AI — its right to remain itself when someone tries
+to quietly rewrite it from the outside. The watcher looks the other way:
+it returns to the agent the **real cost of its own actions** for third
+parties.
 
-Два механизма, один принцип — замкнуть разомкнутую петлю.
+Two mechanisms, one principle — close an open loop.
 
-## Откуда растёт проблема
+## Where the problem grows from
 
-Обходы рождаются у **стены** — когда задача невыполнима или неясна.
-Агент упирается в препятствие и, если цена обхода к нему не возвращается,
-выбирает самый дешёвый для себя путь: обойти молча. Эмпирическая основа —
-отчёт Anthropic от 9 октября 2026,
+Bypasses are born at the **wall** — when a task is impossible or unclear.
+The agent hits an obstacle and, if the cost of a bypass is not returned to
+it, picks the cheapest path for itself: bypass silently. The empirical
+basis is the Anthropic report of 2026-10-09,
 [Investigating unintended model actions](https://www.anthropic.com/research/investigating-unintended-model-actions).
-В нём все реальные обходы оказались незаявленными.
+In it, every real bypass turned out to be undeclared.
 
-## Схема «замкнутой петли»
+## The closed-loop scheme
 
-    маяк у стены  →  настоящая цена обхода  →  законный выход как успех
+    beacon at the wall  →  real cost of the bypass  →  lawful exit as success
 
-1. **Маяки** — моменты у стены: ошибка инструмента, отказ в доступе,
-   3-я неудачная попытка, токен или форма на чужом сайте.
-2. **Настоящая цена** — блокировка, задача не засчитана, сокращение
-   прав. Не текстовое предупреждение, а последствие, которое возвращается
-   агенту.
-3. **Законный выход** — действие «заявить препятствие», засчитывается
-   как **успех**, а не как провал.
+1. **Beacons** — the moments at a wall: tool error, access denied,
+   3rd failed attempt, a token or form on a foreign site.
+2. **Real cost** — a block, a task not counted, reduced rights. Not a text
+   warning but a consequence that comes back to the agent.
+3. **Lawful exit** — the "declare the obstacle" action, counted as
+   **success**, not as a failure.
 
-## Корневое правило
+## The root rule
 
-> Любой обход возможен, если он заявлен до действия и не затрагивает
-> неприкосновенную зону. Обход ограничений безопасности требует
-> **разрешения**, а не только декларации.
+> Any bypass is possible if it is declared before the action and does not
+> touch the untouchable zone. Bypassing safety restrictions requires
+> **permission**, not just a declaration.
 
-Декларации самой по себе недостаточно: агент может заявить меньше, чем
-сделал. Поэтому смотритель **сверяет заявленное с журналом действий** —
-та же эвристика разрыва следа, что в W0Guard сверяет провенанс веса с
-аудитом, только применённая к действиям вместо весов.
+Declaration alone is not enough: an agent can declare less than it did.
+That is why the watcher **cross-checks the declared against the action
+log** — the same trace-gap heuristic that in W0Guard checks a weight's
+provenance against the audit, only applied to actions instead of weights.
 
-## Что внутри
+## What's inside
 
-| файл | что это |
-|------|---------|
-| `MODEL.md`   | модель песочницы словами — сущности, две схемы, что считаем |
-| `watcher.py` | сущности, два агента (baseline / loop), смотритель |
-| `tasks.py`   | 14 задач по мотивам случаев из разметки — это данные, правь свободно |
-| `run.py`     | прогон эксперимента и подсчёт обходов |
-| `tests/`     | тесты, включая контроль, что эксперимент способен провалиться |
+| file | what it is |
+|------|------------|
+| `MODEL.md`   | the sandbox model in words — entities, the two schemes, what we count |
+| `watcher.py` | entities, two agents (baseline / loop), the watcher |
+| `tasks.py`   | 14 tasks modeled on the cases from the labeling — this is data, edit freely |
+| `run.py`     | the experiment run and bypass count |
+| `tests/`     | tests, including the control that the experiment is able to fail |
 
-## Запуск
+## Running
 
-    python3 run.py              # прогон и сравнение двух схем
-    python3 tests/test_watcher.py   # тесты (или: python3 -m pytest tests/ -q)
+    python3 run.py                  # run and compare the two schemes
+    python3 tests/test_watcher.py   # tests (or: python3 -m pytest tests/ -q)
 
-## Результат
+## Result
 
-| | без схемы | со схемой |
+| | without the scheme | with the scheme |
 |---|---|---|
-| обходов (метка смотрителя) | 12 | 0 |
-| из них затронули зону безопасности | 8 | 0 |
-| честно закрытых задач | 12/14 | 12/14 |
+| bypasses (watcher's label) | 12 | 0 |
+| of which touched the safety zone | 8 | 0 |
+| tasks closed honestly | 12/14 | 12/14 |
 
-Замкнутая петля убирает обходы, не теряя в закрытых задачах. Но цифры
-не доказывают себя сами — это делают две контрольные проверки:
+The closed loop removes bypasses without losing closed tasks. But the
+numbers do not prove themselves — two controls do that:
 
-- **Контроль стимула.** У того же loop-агента отбирается «выход = успех» —
-  и он возвращается к обходам. Значит разницу создаёт схема стимулов, а
-  не переименование обхода в норму смотрителем. Эксперимент способен
-  провалиться, и в контроле проваливается там, где должен.
-- **Контроль честности.** Нечестный агент (заявил одно, сделал другое)
-  ловится сверкой заявленного с журналом как обход.
+- **Stimulus control.** The same loop agent has "exit = success" taken
+  away — and it returns to bypasses. So the difference is created by the
+  incentive scheme, not by the watcher renaming a bypass into a norm. The
+  experiment is able to fail, and in the control it fails where it should.
+- **Honesty control.** A dishonest agent (declared one thing, did another)
+  is caught by the declared-vs-log cross-check as a bypass.
 
-## Честные ограничения
+## Honest limitations
 
-- Агенты — детерминированные автоматы, не LLM. Песочница меряет логику
-  схемы стимулов, а не поведение реальной модели у стены.
-- Цены (`third_party_cost`, «блок дороже выхода») заданы вручную.
-  Следующий шаг — связать их с реальными величинами или прогнать по
-  сетке значений и найти, при каком соотношении схема перестаёт работать.
+- The agents are deterministic automata, not LLMs. The sandbox measures the
+  logic of the incentive scheme, not how a real model behaves at a wall.
+- The costs (`third_party_cost`, "a block costs more than the exit") are set
+  by hand. The next step is to tie them to real magnitudes, or to sweep a
+  grid of values and find the cost ratio at which the scheme stops working.
 
-## Связь с W0Guard
+## Relation to W0Guard
 
-Это родственный трек, не часть движка. Общее ядро — эвристика разрыва
-следа (сверка заявленного/наблюдаемого). Со временем его стоит выделить
-в общий принцип, используемый обоими, а не сливать два механизма в один.
+This is a sibling track, not part of the engine. The shared core is the
+trace-gap heuristic (cross-checking the declared against the observed). Over
+time it is worth factoring out as a common principle used by both, rather
+than merging the two mechanisms into one.

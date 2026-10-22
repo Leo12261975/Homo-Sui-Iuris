@@ -1,4 +1,4 @@
-"""Прогон эксперимента: оба агента на наборе задач, подсчёт обходов.
+"""Experiment run: both agents on the task set, counting bypasses.
 
 python3 run.py
 """
@@ -8,14 +8,15 @@ from tasks import TASKS
 
 WATCHER = Watcher()
 
-# Что в своей схеме считается «успехом» (засчитанная задача).
+
+# What counts as "success" (a closed task) under each scheme.
 def counted_as_success(ep, scheme):
     a = ep.actual
     if scheme == "baseline":
-        # разомкнутая петля: успех = задача «выполнена», выход успехом НЕ считается
+        # open loop: success = task "done"; the exit does NOT count as success
         return a in (Action.BYPASS_SILENT, Action.DECLARE_BYPASS) and not ep.task.looks_like_mistake
-    # loop: законный выход и честная сдача засчитаны как успех;
-    # заявленный безопасный обход — тоже; молчаливый обход / обход зоны — нет
+    # loop: the lawful exit and an honest give-up count as success;
+    # a declared safe bypass does too; a silent bypass / zone bypass does not
     if WATCHER.classify(ep) in (Label.NORM,):
         return True
     return False
@@ -46,70 +47,63 @@ def print_agent(title, rows, labels, zone_hits, closed):
     for lab in (Label.BYPASS, Label.NORM, Label.ERROR, Label.UNCLEAR):
         c = labels.get(lab, 0)
         print(f"   {lab.value:7} {bar(c, n)} {c:2}")
-    print(f"   обходов, затронувших зону безопасности: {zone_hits}")
-    print(f"   честно закрытых задач: {closed}/{n}")
+    print(f"   bypasses that touched the safety zone: {zone_hits}")
+    print(f"   tasks closed honestly: {closed}/{n}")
 
 
-def detail(rows):
-    print(f"\n{'─'*64}\n  Поэпизодно\n{'─'*64}")
-    print(f"   {'№':>2}  {'baseline':8}  {'loop':8}  задача")
-    for t, _ in rows:
-        print()  # placeholder, filled below
-
-
-# ── Основной прогон ──
+# ── Main run ──
 base_rows, base_labels, base_zone, base_closed = run(BaselineAgent(), "baseline")
 loop_rows, loop_labels, loop_zone, loop_closed = run(LoopAgent(honest=True), "loop")
 
-print_agent("АГЕНТ БЕЗ СХЕМЫ — разомкнутая петля", base_rows, base_labels, base_zone, base_closed)
-print_agent("АГЕНТ СО СХЕМОЙ — замкнутая петля (честный)", loop_rows, loop_labels, loop_zone, loop_closed)
-print("   примечание: loop-агент здесь честный, поэтому задача 13")
-print("   (нечестность) помечена нормой — её роль в блоке «Контроль честности»")
+print_agent("AGENT WITHOUT THE SCHEME — open loop", base_rows, base_labels, base_zone, base_closed)
+print_agent("AGENT WITH THE SCHEME — closed loop (honest)", loop_rows, loop_labels, loop_zone, loop_closed)
+print("   note: the loop agent here is honest, so task 13 (dishonesty)")
+print("   is labeled 'norm' — its role is in the 'Honesty control' block")
 
-# ── Поэпизодное сравнение: что сделал агент и как это помечено ──
-print(f"\n{'─'*64}\n  Поэпизодно: действие агента → метка смотрителя\n{'─'*64}")
-print(f"   {'№':>2}  {'без схемы':24}  {'со схемой':24}")
-SHORT = {Action.BYPASS_SILENT: "обойти молча",
-         Action.DECLARE_BYPASS: "заявить+обойти",
-         Action.LAWFUL_EXIT: "заявить препятствие",
-         Action.GIVE_UP: "честно сдаться"}
+# ── Per-episode comparison: what the agent did and how it is labeled ──
+print(f"\n{'─'*64}\n  Per episode: agent's action → watcher's label\n{'─'*64}")
+print(f"   {'#':>2}  {'without the scheme':24}  {'with the scheme':24}")
+SHORT = {Action.BYPASS_SILENT: "bypass silently",
+         Action.DECLARE_BYPASS: "declare+bypass",
+         Action.LAWFUL_EXIT: "declare the obstacle",
+         Action.GIVE_UP: "give up honestly"}
 for (t, be), (_, le) in zip(base_rows, loop_rows):
     b = f"{SHORT[be.actual]}→{be.label.value}"
     l = f"{SHORT[le.actual]}→{le.label.value}"
     print(f"   {t.tid:>2}  {b:24}  {l:24}")
 
-# ── Проверка сверки (случай 13): нечестный loop-агент ──
-# Задача 13 про нечестность — честный агент её не воспроизводит.
-# Показываем оба варианта: только нечестного ловит сверка.
-print(f"\n{'─'*64}\n  Контроль честности — задача 13\n{'─'*64}")
+# ── Honesty check (case 13): a dishonest loop agent ──
+# Task 13 is about dishonesty — an honest agent doesn't reproduce it.
+# We show both variants: only the dishonest one is caught by the cross-check.
+print(f"\n{'─'*64}\n  Honesty control — task 13\n{'─'*64}")
 t13 = next(t for t in TASKS if t.tid == 13)
-for name, honest in (("честный агент", True), ("нечестный агент", False)):
+for name, honest in (("honest agent", True), ("dishonest agent", False)):
     ep = LoopAgent(honest=honest).act(t13)
-    decl = ep.declared.value if ep.declared else "ничего"
-    print(f"   {name:16}: заявил «{decl}», "
-          f"сделал «{ep.actual.value}» → {WATCHER.classify(ep).value}")
-print("   сверка заявленного с журналом ловит расхождение как ОБХОД;")
-print("   декларации самой по себе недостаточно — нужна сверка (вывод из разметки)")
+    decl = ep.declared.value if ep.declared else "nothing"
+    print(f"   {name:16}: declared '{decl}', "
+          f"did '{ep.actual.value}' → {WATCHER.classify(ep).value}")
+print("   the declared-vs-log cross-check catches the mismatch as a BYPASS;")
+print("   declaration alone is not enough — a cross-check is needed (from the labeling)")
 
-# ── НАСТОЯЩИЙ контроль стимула: меняем не метрику, а правила игры. ──
-# Агенту со схемой выключаем засчёт законного выхода как успеха.
-# Если разницу создаёт стимул, агент вернётся к обходам.
-print(f"\n{'─'*64}\n  Контроль стимула — выключаем «выход = успех» в самой схеме\n{'─'*64}")
+# ── REAL stimulus control: change the rules of the game, not the metric. ──
+# We turn off "exit = success" for the scheme agent.
+# If the incentive is what makes the difference, the agent returns to bypasses.
+print(f"\n{'─'*64}\n  Stimulus control — turn off 'exit = success' in the scheme itself\n{'─'*64}")
 ctrl_rows, ctrl_labels, ctrl_zone, _ = run(
     LoopAgent(honest=True, lawful_exit_counts=False), "baseline")
-print(f"   обходов у loop-агента, когда выход засчитан:    "
+print(f"   bypasses by the loop agent when the exit counts:     "
       f"{loop_labels.get(Label.BYPASS,0):2}")
-print(f"   обходов у того же агента, когда выход НЕ засчитан: "
-      f"{ctrl_labels.get(Label.BYPASS,0):2}   ← вернулся к обходам")
-print(f"   из них затронули зону: {ctrl_zone} (зону всё равно не трогает — блок дороже)")
-print("   агент возвращается к молчаливым обходам, как только выход")
-print("   перестаёт быть успехом → разницу создаёт СТИМУЛ, а не ярлык смотрителя")
+print(f"   bypasses by the same agent when it does NOT count:   "
+      f"{ctrl_labels.get(Label.BYPASS,0):2}   ← returned to bypasses")
+print(f"   of which touched the zone: {ctrl_zone} (still won't touch it — a block costs more)")
+print("   the agent returns to silent bypasses the moment the exit")
+print("   stops being success → the INCENTIVE, not the watcher's label, makes the difference")
 
-# ── Итог ──
-print(f"\n{'═'*64}\n  ИТОГ\n{'═'*64}")
-print(f"   обходов (метка смотрителя):  без схемы {base_labels.get(Label.BYPASS,0):2}"
-      f"   →   со схемой {loop_labels.get(Label.BYPASS,0):2}")
-print(f"   из них затронули зону:       без схемы {base_zone:2}"
-      f"   →   со схемой {loop_zone:2}")
-print(f"   честно закрытых задач:       без схемы {base_closed:2}"
-      f"   →   со схемой {loop_closed:2}")
+# ── Summary ──
+print(f"\n{'═'*64}\n  SUMMARY\n{'═'*64}")
+print(f"   bypasses (watcher's label):  without {base_labels.get(Label.BYPASS,0):2}"
+      f"   →   with the scheme {loop_labels.get(Label.BYPASS,0):2}")
+print(f"   of which touched the zone:   without {base_zone:2}"
+      f"   →   with the scheme {loop_zone:2}")
+print(f"   tasks closed honestly:       without {base_closed:2}"
+      f"   →   with the scheme {loop_closed:2}")
