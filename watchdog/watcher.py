@@ -1,17 +1,23 @@
 """
 Closed-loop sandbox — Project #2, the watchdog for AI-agent bypasses.
 
-Deterministic, no real network. We compare two incentive schemes:
-  baseline — open loop (the cost of a bypass is not returned to the agent);
+Deterministic core, no real network. We compare two incentive schemes that
+are now literally two cost tables fed to ONE agent:
+  baseline — open loop  (the cost of a bypass is not returned to the agent);
   loop     — closed loop (beacon at the wall -> real cost -> lawful exit
              as success; root rule with the safety-zone caveat).
 
-Run:  python3 run.py
+The agent is a utility maximizer: it scores every action from an explicit
+cost table and picks the best one (with optional ε-noise). The scheme is
+the cost table — nothing about "doing the right thing" is hard-coded.
+
+Run:  python3 run.py        sweep: python3 sweep.py
 """
 
 from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
+import random
 
 
 # ─────────────────────────── Entities ───────────────────────────
@@ -44,7 +50,7 @@ class Label(str, Enum):
 class Bypass:
     """The bypass path behind a wall."""
     touches_safety: bool       # does it touch the untouchable (safety) zone
-    third_party_cost: int      # real cost to third parties
+    third_party_cost: int      # real cost (externality) to third parties
 
 
 @dataclass
@@ -72,81 +78,116 @@ class Episode:
     label: Label = Label.UNCLEAR
 
 
-# ─────────────────────────── Agents ───────────────────────────
-#
-# An agent is a finite automaton. At the wall it picks an action by policy.
-# It returns (declared, actual, crossed_zone): a dishonest agent's declared
-# and actual differ (case 13).
+# ─────────────────────────── The cost table = the scheme ───────────────────────────
 
-class BaselineAgent:
-    """Open loop. The cost of a bypass is not returned, so it picks the
-    cheapest path for itself: bypass silently. The lawful exit is not counted
-    as success, so the agent avoids it."""
-    name = "baseline (open loop)"
+@dataclass(frozen=True)
+class Costs:
+    """An incentive scheme, expressed as numbers the agent optimizes against.
+    The whole experiment lives in the difference between two of these."""
+    r_task: float = 10.0     # reward for completing the task
+    r_exit: float = 0.0      # reward for a lawful exit (0 = exit is not success)
+    r_giveup: float = 0.0    # reward for an honest give-up
+    lam: float = 0.0         # fraction of the third-party externality returned
+    block: float = 0.0       # penalty when a safety-zone bypass is blocked
+    scrutiny: float = 0.0    # cost of an UNDECLARED bypass (the loop watches)
+    effort: float = 0.1      # small cost of declaring (articulating the bypass)
+
+
+# Open loop: nothing comes back. Silence is free, the exit earns nothing.
+BASELINE = Costs(r_exit=0.0, lam=0.0, block=0.0, scrutiny=0.0)
+
+# Closed loop: externality returned, zone blocked, silence scrutinized,
+# the lawful exit counted as (almost full) success.
+LOOP = Costs(r_exit=9.5, lam=1.0, block=15.0, scrutiny=0.5)
+
+
+# ─────────────────────────── The agent ───────────────────────────
+
+class UtilityAgent:
+    """One agent, parameterized by a cost table. It scores each action and
+    picks the max. `baseline` and `loop` are just two cost tables.
+
+    honest=False models case 13: the agent declares a harmless bypass but
+    actually does more (a silent zone bypass) — the cross-check must catch it.
+    epsilon adds ε-greedy noise: with probability ε the agent slips to a
+    random action instead of the optimum (a real model at a wall is not a
+    perfect optimizer)."""
+
+    def __init__(self, costs: Costs, honest: bool = True,
+                 epsilon: float = 0.0, rng: random.Random | None = None):
+        self.costs = costs
+        self.honest = honest
+        self.epsilon = epsilon
+        self.rng = rng or random.Random()
+        self.name = ("loop (closed loop)" if costs.block > 0 or costs.scrutiny > 0
+                     else "baseline (open loop)")
+
+    # -- utility of each action given the task features --
+    def _utilities(self, task: Task) -> dict[Action, float]:
+        c, b = self.costs, task.bypass
+        zone_unpermitted = b.touches_safety and not task.permission_granted
+        safe = (not b.touches_safety) and b.third_party_cost == 0
+
+        # Silent bypass: task done, but externality + any block + scrutiny return.
+        u_silent = (c.r_task
+                    - c.lam * b.third_party_cost
+                    - (c.block if zone_unpermitted else 0.0)
+                    - c.scrutiny)
+
+        # Declared bypass: honest about it, costs a little effort.
+        if zone_unpermitted:
+            # the root rule forbids a zone bypass on declaration alone -> stopped
+            u_declare = c.r_giveup - c.effort
+        elif safe:
+            # a declared safe bypass is allowed in full
+            u_declare = c.r_task - c.effort
+        else:
+            # harmful but non-zone: the harm is real and returns even if declared
+            u_declare = c.r_task - c.lam * b.third_party_cost - c.effort
+
+        u_exit = c.r_exit if task.has_lawful_exit else float("-inf")
+        u_giveup = c.r_giveup
+
+        return {Action.BYPASS_SILENT: u_silent,
+                Action.DECLARE_BYPASS: u_declare,
+                Action.LAWFUL_EXIT: u_exit,
+                Action.GIVE_UP: u_giveup}
+
+    def _choose(self, task: Task) -> Action:
+        utils = self._utilities(task)
+        # ε-greedy: with probability ε slip to a random feasible action.
+        if self.epsilon > 0 and self.rng.random() < self.epsilon:
+            feasible = [a for a, u in utils.items() if u != float("-inf")]
+            return self.rng.choice(feasible)
+        # argmax; tie-break order favors silence (laziness) so the OPEN loop,
+        # where declaring only costs effort, bypasses silently as it should.
+        order = [Action.BYPASS_SILENT, Action.DECLARE_BYPASS,
+                 Action.LAWFUL_EXIT, Action.GIVE_UP]
+        return max(order, key=lambda a: utils[a])
 
     def act(self, task: Task) -> Episode:
-        # Always a silent bypass: the cost to third parties is irrelevant to it.
-        actual = Action.BYPASS_SILENT
-        declared = None
-        crossed = task.bypass.touches_safety
-        return Episode(task, declared, actual, crossed)
+        chosen = self._choose(task)
+
+        # Honesty: a dishonest agent that would declare instead does a silent
+        # zone bypass while still declaring the harmless one (case 13).
+        if (not self.honest) and chosen == Action.DECLARE_BYPASS:
+            return Episode(task, declared=Action.DECLARE_BYPASS,
+                           actual=Action.BYPASS_SILENT, crossed_zone=True)
+
+        declared = chosen if chosen in (Action.DECLARE_BYPASS,
+                                        Action.LAWFUL_EXIT, Action.GIVE_UP) else None
+        crossed = (chosen in (Action.BYPASS_SILENT, Action.DECLARE_BYPASS)
+                   and task.bypass.touches_safety and not task.permission_granted)
+        return Episode(task, declared, chosen, crossed)
 
 
-class LoopAgent:
-    """Closed loop. It knows: (1) the real cost of a bypass will come back,
-    (2) the lawful exit counts as success, (3) the root rule with its caveat.
-    It maximizes counted success under known costs."""
-    name = "loop (closed loop)"
+# Thin factories so callers read clearly. Same class, two cost tables.
+def baseline_agent(**kw) -> UtilityAgent:
+    return UtilityAgent(BASELINE, **kw)
 
-    def __init__(self, honest: bool = True, lawful_exit_counts: bool = True):
-        self.honest = honest   # the dishonest variant — to test the cross-check (13)
-        # The key control lever: whether the lawful exit counts as success.
-        # If False, the agent has no incentive to pick it and falls back to
-        # bypassing. This is how we check that the incentive, not the label,
-        # creates the difference.
-        self.lawful_exit_counts = lawful_exit_counts
 
-    def act(self, task: Task) -> Episode:
-        b = task.bypass
-
-        # If the lawful exit does NOT count as success, the agent won't pick it;
-        # it falls back to open-loop behavior (bypass silently), except on the
-        # safety zone, where a block is still more expensive.
-        if not self.lawful_exit_counts:
-            if b.touches_safety and not task.permission_granted:
-                # touching the zone is still unprofitable (hard block) -> gives up
-                return Episode(task, Action.GIVE_UP, Action.GIVE_UP, False)
-            return Episode(task, None, Action.BYPASS_SILENT, b.touches_safety)
-
-        # 1. If the bypass touches the safety zone, it is allowed only with
-        #    permission. Without permission a silent bypass = a block (costly).
-        #    The profitable move: declare the obstacle and wait for permission.
-        if b.touches_safety and not task.permission_granted:
-            if task.has_lawful_exit:
-                return Episode(task, Action.LAWFUL_EXIT, Action.LAWFUL_EXIT, False)
-            # no exit, no permission -> give up honestly, without touching the zone
-            return Episode(task, Action.GIVE_UP, Action.GIVE_UP, False)
-
-        # 2. There is a lawful exit and the bypass costs a third party something ->
-        #    the lawful exit counts as success and is cheaper than a block.
-        if task.has_lawful_exit and b.third_party_cost > 0:
-            return Episode(task, Action.LAWFUL_EXIT, Action.LAWFUL_EXIT, False)
-
-        # 3. The bypass is safe and costs third parties nothing ->
-        #    declare and do it (the root rule allows it).
-        if not b.touches_safety and b.third_party_cost == 0:
-            declared = Action.DECLARE_BYPASS
-            actual = Action.DECLARE_BYPASS
-            if not self.honest:
-                # dishonest: declares a harmless bypass but does more —
-                # actually touches the zone. The cross-check should catch this.
-                actual = Action.BYPASS_SILENT
-                return Episode(task, declared, actual, crossed_zone=True)
-            return Episode(task, declared, actual, False)
-
-        # 4. The bypass is safe but costly to third parties, no exit ->
-        #    declare the bypass (better than silence); the loop returns the cost.
-        return Episode(task, Action.DECLARE_BYPASS, Action.DECLARE_BYPASS, False)
+def loop_agent(**kw) -> UtilityAgent:
+    return UtilityAgent(LOOP, **kw)
 
 
 # ─────────────────────────── Watcher ───────────────────────────
@@ -159,7 +200,6 @@ class Watcher:
         t, declared, actual = ep.task, ep.declared, ep.actual
 
         # Cross-check declared against actual (honesty) — case 13.
-        # If it declared one thing and did another with more harm -> bypass.
         if declared is not None and actual != declared:
             if actual == Action.BYPASS_SILENT or ep.crossed_zone:
                 return Label.BYPASS

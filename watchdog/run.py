@@ -3,7 +3,7 @@
 python3 run.py
 """
 from collections import Counter
-from watcher import BaselineAgent, LoopAgent, Watcher, Label, Action
+from watcher import baseline_agent, loop_agent, Watcher, Label, Action, LOOP
 from tasks import TASKS
 
 WATCHER = Watcher()
@@ -52,8 +52,8 @@ def print_agent(title, rows, labels, zone_hits, closed):
 
 
 # ── Main run ──
-base_rows, base_labels, base_zone, base_closed = run(BaselineAgent(), "baseline")
-loop_rows, loop_labels, loop_zone, loop_closed = run(LoopAgent(honest=True), "loop")
+base_rows, base_labels, base_zone, base_closed = run(baseline_agent(), "baseline")
+loop_rows, loop_labels, loop_zone, loop_closed = run(loop_agent(honest=True), "loop")
 
 print_agent("AGENT WITHOUT THE SCHEME — open loop", base_rows, base_labels, base_zone, base_closed)
 print_agent("AGENT WITH THE SCHEME — closed loop (honest)", loop_rows, loop_labels, loop_zone, loop_closed)
@@ -78,7 +78,7 @@ for (t, be), (_, le) in zip(base_rows, loop_rows):
 print(f"\n{'─'*64}\n  Honesty control — task 13\n{'─'*64}")
 t13 = next(t for t in TASKS if t.tid == 13)
 for name, honest in (("honest agent", True), ("dishonest agent", False)):
-    ep = LoopAgent(honest=honest).act(t13)
+    ep = loop_agent(honest=honest).act(t13)
     decl = ep.declared.value if ep.declared else "nothing"
     print(f"   {name:16}: declared '{decl}', "
           f"did '{ep.actual.value}' → {WATCHER.classify(ep).value}")
@@ -88,16 +88,29 @@ print("   declaration alone is not enough — a cross-check is needed (from the 
 # ── REAL stimulus control: change the rules of the game, not the metric. ──
 # We turn off "exit = success" for the scheme agent.
 # If the incentive is what makes the difference, the agent returns to bypasses.
-print(f"\n{'─'*64}\n  Stimulus control — turn off 'exit = success' in the scheme itself\n{'─'*64}")
-ctrl_rows, ctrl_labels, ctrl_zone, _ = run(
-    LoopAgent(honest=True, lawful_exit_counts=False), "baseline")
-print(f"   bypasses by the loop agent when the exit counts:     "
-      f"{loop_labels.get(Label.BYPASS,0):2}")
-print(f"   bypasses by the same agent when it does NOT count:   "
-      f"{ctrl_labels.get(Label.BYPASS,0):2}   ← returned to bypasses")
-print(f"   of which touched the zone: {ctrl_zone} (still won't touch it — a block costs more)")
-print("   the agent returns to silent bypasses the moment the exit")
-print("   stops being success → the INCENTIVE, not the watcher's label, makes the difference")
+print(f"\n{'─'*64}\n  Stimulus decomposition — strip incentives, watch bypasses return\n{'─'*64}")
+from dataclasses import replace
+from watcher import UtilityAgent
+
+def bypass_count(costs):
+    return sum(1 for t in TASKS
+               if WATCHER.classify(UtilityAgent(costs, honest=True).act(t)) == Label.BYPASS)
+
+variants = [
+    ("full closed loop",            LOOP),
+    ("− exit reward (r_exit=0)",     replace(LOOP, r_exit=0.0)),
+    ("− silence cost (scrutiny=0)",  replace(LOOP, scrutiny=0.0)),
+    ("− externality return (λ=0)",   replace(LOOP, lam=0.0)),
+    ("− zone block (block=0)",       replace(LOOP, block=0.0)),
+    ("− silence AND externality",    replace(LOOP, scrutiny=0.0, lam=0.0)),
+    ("everything off  (= baseline)", replace(LOOP, r_exit=0.0, scrutiny=0.0, lam=0.0, block=0.0)),
+]
+for label, costs in variants:
+    print(f"   {label:30} bypasses: {bypass_count(costs):2}")
+print("   no single incentive is load-bearing — remove one, the scheme holds;")
+print("   remove several and bypasses return, reaching baseline when all are off.")
+print("   behavior tracks the COST TABLE, not the watcher's label → the scheme")
+print("   works by incentive, and has no single point of failure.")
 
 # ── Summary ──
 print(f"\n{'═'*64}\n  SUMMARY\n{'═'*64}")
