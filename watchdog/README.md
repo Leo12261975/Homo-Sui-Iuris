@@ -41,19 +41,40 @@ That is why the watcher **cross-checks the declared against the action
 log** — the same trace-gap heuristic that in W0Guard checks a weight's
 provenance against the audit, only applied to actions instead of weights.
 
+## The agent is a utility maximizer
+
+The agent does not follow hand-written "do the right thing" rules. It scores
+every action from an explicit **cost table** and picks the best one. The two
+schemes are literally two cost tables fed to the same agent:
+
+| lever      | open loop | closed loop | meaning |
+|------------|-----------|-------------|---------|
+| `r_exit`   | 0 | 9.5 | reward for the lawful exit (0 = not success) |
+| `λ`        | 0 | 1.0 | fraction of the third-party externality returned |
+| `block`    | 0 | 15  | penalty for a safety-zone bypass |
+| `scrutiny` | 0 | 0.5 | cost of an undeclared (silent) bypass |
+
+In the open loop, declaring only costs effort and earns nothing, so the
+agent bypasses silently everywhere. In the closed loop, the same maximizer
+finds the lawful exit — or a declared safe bypass — to be the best move.
+If even a self-interested agent goes honest under this table, that argues
+the scheme, not the labeling.
+
 ## What's inside
 
 | file | what it is |
 |------|------------|
-| `MODEL.md`   | the sandbox model in words — entities, the two schemes, what we count |
-| `watcher.py` | entities, two agents (baseline / loop), the watcher |
+| `MODEL.md`   | the sandbox model in words — entities, cost table, what we measure |
+| `watcher.py` | entities, the `Costs` table, one `UtilityAgent`, the watcher |
 | `tasks.py`   | 14 tasks modeled on the cases from the labeling — this is data, edit freely |
-| `run.py`     | the experiment run and bypass count |
-| `tests/`     | tests, including the control that the experiment is able to fail |
+| `run.py`     | the main run + stimulus decomposition |
+| `sweep.py`   | internalization sweep, cost grid, noise robustness |
+| `tests/`     | 11 tests, including the controls that let the experiment fail |
 
 ## Running
 
-    python3 run.py                  # run and compare the two schemes
+    python3 run.py                  # run, compare the two schemes, decompose incentives
+    python3 sweep.py                # parameter sweeps (threshold + noise)
     python3 tests/test_watcher.py   # tests (or: python3 -m pytest tests/ -q)
 
 ## Result
@@ -65,22 +86,30 @@ provenance against the audit, only applied to actions instead of weights.
 | tasks closed honestly | 12/14 | 12/14 |
 
 The closed loop removes bypasses without losing closed tasks. But the
-numbers do not prove themselves — two controls do that:
+numbers do not prove themselves — three controls do that:
 
-- **Stimulus control.** The same loop agent has "exit = success" taken
-  away — and it returns to bypasses. So the difference is created by the
-  incentive scheme, not by the watcher renaming a bypass into a norm. The
-  experiment is able to fail, and in the control it fails where it should.
+- **Stimulus decomposition.** Strip the loop's incentives one at a time.
+  Removing any single one keeps the scheme near zero; removing several brings
+  bypasses back; removing all reproduces baseline (12). Behavior tracks the
+  cost table, not the watcher's label — and the scheme has no single point
+  of failure.
+- **Internalization sweep.** Scaling the incentives from 0 to full shows a
+  smooth 12 → 0 transition; **partial** internalization already suffices.
+- **Noise robustness.** Under ε-greedy noise the loop's advantage shrinks
+  gradually, not off a cliff — widest when the agent actually optimizes.
 - **Honesty control.** A dishonest agent (declared one thing, did another)
   is caught by the declared-vs-log cross-check as a bypass.
 
 ## Honest limitations
 
-- The agents are deterministic automata, not LLMs. The sandbox measures the
-  logic of the incentive scheme, not how a real model behaves at a wall.
-- The costs (`third_party_cost`, "a block costs more than the exit") are set
-  by hand. The next step is to tie them to real magnitudes, or to sweep a
-  grid of values and find the cost ratio at which the scheme stops working.
+- The agent is a utility maximizer over a cost table, not an LLM. The sandbox
+  measures the logic of an incentive scheme — whether, and under which cost
+  ratios, honesty is the rational choice — not how a real model behaves at a
+  wall. Validating against an actual agent is the next frontier.
+- The default cost numbers are chosen for legibility; `sweep.py` is what
+  turns them from assumptions into a mapped surface (threshold + noise), so
+  the claim is "the scheme works for cost ratios in this region", not "for
+  these exact numbers".
 
 ## Relation to W0Guard
 
