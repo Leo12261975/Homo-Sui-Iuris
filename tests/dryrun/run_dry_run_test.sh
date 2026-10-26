@@ -52,8 +52,18 @@ if ! "${COMPOSE[@]}" up -d --build; then
 fi
 
 echo ">>> Waiting for the verifier..."
-"${COMPOSE[@]}" wait verifier
-code=$?
+# NB: `docker compose wait verifier` errors (exit 1) when the verifier has
+# already exited by the time it runs — and it usually has, since the verifier
+# is gated on the nodes completing and then finishes fast. That race made this
+# job flaky (PASS printed, but the wrapper reported exit 1). Plain `docker wait`
+# on the container id returns the real stored exit code even once it has stopped.
+vid="$("${COMPOSE[@]}" ps -aq verifier)"
+if [ -z "$vid" ]; then
+  echo "!!! verifier container not found (it may have failed to start)"
+  code=1
+else
+  code="$(docker wait "$vid")"
+fi
 
 echo
 echo ">>> ============ node logs ============"
