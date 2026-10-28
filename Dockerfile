@@ -15,7 +15,7 @@ RUN pip install --no-cache-dir "websockets==16.1.1"
 
 # Only the six files the client actually needs -- NOT bootstrap_relay.py
 # (that's server-side only) and not the rest of the repo.
-COPY w0guard_node.py networked_node.py node_transport.py core_engine.py leukocyte_protocol.py erythrocyte.py ./
+COPY w0guard_node.py networked_node.py node_transport.py core_engine.py leukocyte_protocol.py erythrocyte.py trace_gap.py ./
 
 # node_config.json (created on first run) and the per-node audit log
 # both get written here -- mount a volume at /app if you want them to
