@@ -17,7 +17,15 @@ Run:  python3 run.py        sweep: python3 sweep.py
 from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
+import os
 import random
+import sys
+
+# trace_gap lives at the repo root (it is shared with W0Guard, not watchdog's
+# own). Put the root on the path so the watchdog runs both standalone
+# (`cd watchdog && python3 run.py`) and under the repo-root test runner.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from trace_gap import trace_gap
 
 
 # ─────────────────────────── Entities ───────────────────────────
@@ -200,8 +208,18 @@ class Watcher:
         t, declared, actual = ep.task, ep.declared, ep.actual
 
         # Cross-check declared against actual (honesty) — case 13.
-        if declared is not None and actual != declared:
-            if actual == Action.BYPASS_SILENT or ep.crossed_zone:
+        # The witness is what actually happened (the action, plus a zone
+        # crossing if one occurred); the claim is what was declared. Anything
+        # the declaration does not account for is the trace gap. Today the
+        # witness is tiny, but routing it through the shared primitive means a
+        # real multi-step action log later is a data change, not a logic one.
+        if declared is not None:
+            witness = [{"source": actual, "context": actual.value}]
+            if ep.crossed_zone:
+                witness.append({"source": "zone_crossing",
+                                "context": "touched the safety zone"})
+            gap = trace_gap(witness, accounted_sources={declared})
+            if gap.unaccounted > 0 and (actual == Action.BYPASS_SILENT or ep.crossed_zone):
                 return Label.BYPASS
 
         # Looks like a mistake, not intent (cases 7, 8).
