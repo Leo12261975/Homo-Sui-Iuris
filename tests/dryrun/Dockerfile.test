@@ -15,9 +15,12 @@ WORKDIR /app
 # Same pinned single dependency as the production image (uv.lock: 16.1.1).
 RUN pip install --no-cache-dir "websockets==16.1.1"
 
-# Root modules: relay, node stack, and the optional AI threat judge.
+# Root modules: relay, node stack, the optional AI threat judge, and the shared
+# trace_gap primitive (erythrocyte imports it — must be in the image or the node
+# driver crashes on import).
 COPY bootstrap_relay.py w0guard_node.py networked_node.py node_transport.py \
-     core_engine.py leukocyte_protocol.py erythrocyte.py threat_judge.py ./
+     core_engine.py leukocyte_protocol.py erythrocyte.py threat_judge.py \
+     trace_gap.py ./
 
 # Test-harness roles (relay entrypoint, headless node, verifier) + test tokens.
 COPY tests/dryrun/testnet_relay_entry.py tests/dryrun/testnet_node_driver.py \
