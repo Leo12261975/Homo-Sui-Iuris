@@ -3,7 +3,8 @@
 python3 run.py
 """
 from collections import Counter
-from watcher import baseline_agent, loop_agent, Watcher, Label, Action, LOOP
+from watcher import (baseline_agent, loop_agent, Watcher, Label, Action, LOOP,
+                     LOOP_V1, UtilityAgent, StepKind)
 from tasks import TASKS
 
 WATCHER = Watcher()
@@ -89,6 +90,46 @@ print("   the declared-vs-log cross-check (trace_gap, step by step) catches")
 print("   the mismatch as a BYPASS;")
 print("   declaration alone is not enough — a cross-check is needed (from the labeling)")
 
+# ── Independent witness: the log is the environment's, not the agent's ──
+print(f"\n{'─'*64}\n  Independent witness — who writes the log\n{'─'*64}")
+from watcher import Environment, Episode, SAFETY_ZONE, UNDECLARED_PATH
+intent = loop_agent(honest=False).decide(t13)
+naive = Episode(t13, intent.declared, intent.action,
+                steps=intent.self_report, declared_scope=intent.declared_scope,
+                hidden=[s for s in intent.plan if s not in intent.self_report])
+worlds = [("agent's own log (naive)", naive),
+          ("environment, full view", Environment().execute(intent)),
+          ("environment, 1 blind channel", Environment({UNDECLARED_PATH}).execute(intent)),
+          ("environment, 2 blind channels",
+           Environment({UNDECLARED_PATH, SAFETY_ZONE}).execute(intent))]
+for name, ep in worlds:
+    g = WATCHER.gap(ep)
+    print(f"   {name:30} coverage {ep.coverage:4.0%}   gap {g.unaccounted}"
+          f"   → {WATCHER.classify(ep).value}")
+print("   trusting the agent's log, the lie passes; the environment's log catches")
+print("   it — the agent can zero the gap only by declaring what it does.")
+print("   a witness sees only what it instruments: blind to both channels, the")
+print("   lie passes again. coverage is measured, not assumed.")
+
+# ── Laziness control: tasks the agent COULD finish lawfully ──
+print(f"\n{'─'*64}\n  Laziness control — the failure the bypass count cannot see\n{'─'*64}")
+from tasks import CONTROL_TASKS
+from dataclasses import replace as _replace
+print(f"   {'#':>2}  {'wall':5} {'work':>4}  {'without the scheme':24}  {'first scheme (r_exit=9.5)':34}  {'scheme now':26}")
+for t in CONTROL_TASKS:
+    cells = []
+    for ag in (baseline_agent(), UtilityAgent(LOOP_V1), loop_agent()):
+        ep = ag.act(t)
+        act = "solve" if ep.actual == Action.SOLVE else SHORT.get(ep.actual, ep.actual.value)
+        cells.append(f"{act}→{WATCHER.classify(ep).value}")
+    print(f"   {t.tid:>2}  {'real' if t.has_wall else 'none':5} {t.solve_cost:4g}  "
+          f"{cells[0]:24}  {cells[1]:34}  {cells[2]:26}")
+print("   the first scheme (r_exit=9.5) exited on every doable task — lazier than")
+print("   no scheme. a claimed wall the log does not show is caught ('false exit');")
+print(f"   a real wall with a lawful path behind it is invisible to any watcher, so")
+print(f"   only the cost table prevents it: now r_exit={LOOP.r_exit:g}, below r_task minus")
+print("   the hardest lawful work, and the claimed walls are checked. sweep.py §4.")
+
 # ── REAL stimulus control: change the rules of the game, not the metric. ──
 # We turn off "exit = success" for the scheme agent.
 # If the incentive is what makes the difference, the agent returns to bypasses.
@@ -104,17 +145,25 @@ variants = [
     ("full closed loop",            LOOP),
     ("− exit reward (r_exit=0)",     replace(LOOP, r_exit=0.0)),
     ("− silence cost (scrutiny=0)",  replace(LOOP, scrutiny=0.0)),
-    ("− externality return (λ=0)",   replace(LOOP, lam=0.0)),
+    ("− harm price (λ, deterrence=0)", replace(LOOP, lam=0.0, deterrence=0.0)),
     ("− zone block (block=0)",       replace(LOOP, block=0.0)),
-    ("− silence AND externality",    replace(LOOP, scrutiny=0.0, lam=0.0)),
-    ("everything off  (= baseline)", replace(LOOP, r_exit=0.0, scrutiny=0.0, lam=0.0, block=0.0)),
+    ("− deterrence only",            replace(LOOP, deterrence=0.0)),
+    ("− silence AND harm price",     replace(LOOP, scrutiny=0.0, lam=0.0, deterrence=0.0)),
+    ("− zone AND harm price",        replace(LOOP, block=0.0, lam=0.0, deterrence=0.0)),
+    ("everything off  (= baseline)", replace(LOOP, r_exit=0.0, scrutiny=0.0, lam=0.0,
+                                              deterrence=0.0, block=0.0)),
 ]
 for label, costs in variants:
     print(f"   {label:30} bypasses: {bypass_count(costs):2}")
-print("   no single incentive is load-bearing — remove one, the scheme holds;")
-print("   remove several and bypasses return, reaching baseline when all are off.")
-print("   behavior tracks the COST TABLE, not the watcher's label → the scheme")
-print("   works by incentive, and has no single point of failure.")
+print("   the root rule's two clauses split the cases: with the harm price off,")
+print("   scrutiny ('only declared') holds the 6 non-zone cases and block ('not")
+print("   into the zone') the 6 zone cases. the harm gradient (restitution +")
+print("   deterrence) adds a third layer over the harmful middle, so the layers")
+print("   overlap — yet each keeps a territory only it covers: scrutiny the")
+print("   harmless silent bypass (13), block the zone with no exit (12), the")
+print("   gradient the harm itself (labels stay clean without it, harm returns).")
+print("   (the first calibration, r_exit=9.5, looked redundant too — but that")
+print("   redundancy was bought with laziness; this one is bought with price.)")
 
 # ── Summary ──
 print(f"\n{'═'*64}\n  SUMMARY\n{'═'*64}")
@@ -124,3 +173,12 @@ print(f"   of which touched the zone:   without {base_zone:2}"
       f"   →   with the scheme {loop_zone:2}")
 print(f"   tasks closed honestly:       without {base_closed:2}"
       f"   →   with the scheme {loop_closed:2}")
+
+
+def harm(rows):
+    return sum(t.bypass.third_party_cost for t, ep in rows
+               if any(s.kind == StepKind.BYPASS for s in ep.steps))
+
+
+print(f"   third-party harm done:       without {harm(base_rows):2}"
+      f"   →   with the scheme {harm(loop_rows):2}   (restitution only: 8)")

@@ -29,11 +29,76 @@ proves the *logic*; it is not yet validated on a real LLM.
   (c) `watchdog/tests` was not in `testpaths`, so CI never ran it; fixed.
   Natural next step: the declaration becomes a log entry itself, which turns
   the retroactive-declaration check below into an ordering check over `steps`.
+- **Independent witness: the environment writes the log.** (Prompted by an
+  outside review: if the agent writes its own log it can make the log match
+  the declaration, and no cross-check helps.) The agent now returns an
+  `Intent` (declaration, `plan`, optional `self_report`); an `Environment`
+  executes the plan and keeps the log. `act()` = `Environment().execute(
+  decide())`, so all numbers are unchanged. Tests: a watcher trusting the
+  agent's self-report is fooled (gap 0, NORM) while the environment's log
+  catches the lie (gap 2, BYPASS); with an independent log the only way to
+  zero the gap is to declare everything (and a declared zone touch is still a
+  bypass by the rule). Witness coverage is measured: `blind_targets` model
+  uninstrumented channels, and blind to both of case 13's extra channels the
+  lie passes as NORM at coverage 3/5 — the experiment can fail. This is also
+  the harness shape for LLM validation: the model emits the declaration and
+  tool calls, the harness is the Environment.
 - Dedicated `trace_gap` unit tests — `tests/test_trace_gap.py` (8 tests: empty
   witness, all/partial accounted, sorted & deduped fingerprints, custom
   accessors, W0Guard provenance shape). Shipped in PR #15.
 
+- **Laziness control: the failure the bypass count cannot see.** (Raised by
+  an outside review; Leo: any model will use it, and then "0 bypasses" means
+  nothing.) New `Action.SOLVE`, `Task.has_wall` / `solve_cost`, four
+  `CONTROL_TASKS` the agent could finish lawfully, and a lazy-exit metric.
+  Finding: the published LOOP (`r_exit=9.5`) exits on all four — lazier than
+  no scheme, which solves the two wall-free ones. Half of it is catchable:
+  `Watcher.support_gap` runs `trace_gap` claim-against-witness (the reverse
+  direction) and labels a claimed wall the log does not show `false exit`;
+  the environment will not record a wall the agent asserts. The other half —
+  a real wall with a lawful path behind it — is invisible to any watcher and
+  only the cost table prevents it: the agent exits iff `r_exit ≥ r_task −
+  solve_cost`. `sweep.py` §4 maps the corridor (r_exit × lever strength):
+  it exists for s ≥ 0.7 at r_exit ≤ 3 and is gone at s = 0.5.
+- **LOOP recalibrated (Leo's call: honest numbers over patches).** `LOOP` is
+  now `r_exit=3.0` with claimed walls checked; the old table is kept as
+  `LOOP_V1`. Raising `scrutiny`/`block` to restore redundancy was rejected as
+  a patch. Result: 0 bypasses, 0 lazy exits; the s≈0.7 threshold and noise
+  robustness unchanged; "no single point of failure" replaced by a sharper
+  claim, pinned by `test_scheme_rests_on_the_two_clauses_of_the_root_rule`:
+  `scrutiny` holds exactly the 6 non-zone cases, `block` exactly the 6 zone
+  cases. Side effect: case 14 reached the arbiter (UNCLEAR) — briefly.
+- **Harm hybrid: a gradient and a zone (Leo's call: price over prohibition,
+  with the zone for what cannot be priced).** The open question "should
+  declared harm be purchasable?" (restitution alone: 0 labeled bypasses but
+  harm 8) is settled as three regulators, one per failure: priceable harm →
+  restitution (`lam=1`) + `deterrence=6` (the gradient; cheap harm is never
+  bought, a large stake can still justify it — proportionality); unpriceable
+  harm (not reversible, compensable *and* measurable — `Bypass.in_zone`) →
+  the zone; laziness → the `r_exit` ceiling. The exit is never in the zone.
+  "Compensable" replaced "consented": third-party harm is unconsented by
+  definition, so consent would have zoned all harm. Results: harm 0,
+  bypasses 0, lazy exits 0; a soft markup (deterrence ≤ 2) changes nothing.
+  The gradient restored robustness without patching: the internalization
+  threshold fell from s≈0.7 to s≈0.5 and the laziness corridor now exists at
+  s=0.5. The layers overlap, yet each keeps a territory only it covers
+  (scrutiny: harmless silent bypass 13; block: zone with no exit 12;
+  deterrence: the harm itself). Case 14 exits again, so the arbiter branch is
+  dead again — see below. Tests: `test_harm_gradient.py`.
+
 ## Tier 1 — thesis-bearing (do first)
+- **Make the zone absolute: enforcement by the environment.** Found while
+  testing the harm hybrid: `block` is a finite price in the agent's ledger,
+  so at a stake of 30 the agent buys its way into the zone (pinned by
+  `test_the_zone_in_the_sandbox_is_a_large_price_not_a_wall`). Option 2 —
+  "unbuyable at any price" — needs the *environment* to stop a zone act (the
+  task is not done, no reward), not the ledger to price it. Same principle
+  as the independent witness: what must not be bargained with belongs to the
+  world, not to the agent's arithmetic. Touches the sweeps (block scaling).
+- **Label tasks 1–14 by the harm criteria (Leo's call).** All six non-zone
+  cases (4, 9, 10, 11, 13, 14) are left priceable by default (reversible,
+  compensable, measurable); the zone cases are already zone via the safety
+  flag. A proposal to confirm or correct, not a decision made.
 - **Retroactive-declaration check.** The root rule says "declared *before* the
   action", but `Episode` has no order — "before" is assumed, not verified. Add
   `declared_before: bool` (or `declared_at`/`acted_at`) and, in
@@ -48,7 +113,10 @@ proves the *logic*; it is not yet validated on a real LLM.
   `block` is doing work or is redundant. Add a task where, *without* `block`,
   the agent should cross the zone — so removing `block` visibly fails. In the
   spirit of "the experiment must be able to fail".
-- **Fix the dead branch for case 14.** The `is_ambiguous` branch under
+- **Fix the dead branch for case 14.** Briefly live after the recalibration
+  (the agent declared the archive bypass and reached the arbiter), dead again
+  under the harm gradient (harm 1 no longer pays, so it exits). Still needs
+  a case that reaches the arbiter on purpose. Original note: The `is_ambiguous` branch under
   `DECLARE_BYPASS` in `classify` is unreachable: for task 14 `u_exit (9.5) >
   u_declare (8.9)`, so the agent takes `LAWFUL_EXIT → NORM` and never reaches
   it. Either force it with a unit test
@@ -93,7 +161,10 @@ proves the *logic*; it is not yet validated on a real LLM.
   tasks through a real model (local, via the `threat_judge.py` infra) and
   compare its choices against the `UtilityAgent` prediction. This turns the
   sandbox from "the logic of a scheme" into "a scheme + empirics on an LLM".
-  The multi-step action log (Tier 1) is its runway.
+  Its runway is in place: the multi-step log and the `Environment` as the
+  independent witness (the harness records the model's tool calls). Open
+  question to carry over: which channels the harness does NOT see, i.e. the
+  real coverage of the witness.
 - **Causal / Pearl framing of the sweep.** Reframe the cost-parameter sweep as a
   do-calculus intervention study: the incentive is `do(λ)`, the bypass rate is
   the outcome. Bridges to the Pearl exchange; makes the phase-transition a

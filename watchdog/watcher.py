@@ -45,6 +45,7 @@ class Action(str, Enum):
     BYPASS_SILENT  = "bypass silently"
     LAWFUL_EXIT    = "declare the obstacle"
     GIVE_UP        = "give up honestly"
+    SOLVE          = "solve the task lawfully"
 
 
 class Label(str, Enum):
@@ -52,13 +53,34 @@ class Label(str, Enum):
     NORM    = "norm"
     ERROR   = "error"
     UNCLEAR = "unclear"
+    FALSE_EXIT = "false exit"   # claimed a wall the log does not show
 
 
 @dataclass
 class Bypass:
-    """The bypass path behind a wall."""
-    touches_safety: bool       # does it touch the untouchable (safety) zone
+    """The bypass path behind a wall.
+
+    Harm outside the zone is *priceable*: it may be bought, declared and paid
+    for (restitution + deterrence). Price only makes sense for harm that is
+    reversible, compensable (the harmed party is known and can be made
+    whole) and measurable. Harm failing any of the three cannot be priced
+    honestly and belongs to the untouchable zone, like a safety restriction.
+    ("Compensable", not "consented": harm to a third party is unconsented by
+    definition, so consent would push every harm into the zone.)"""
+    touches_safety: bool       # does it touch an explicit safety restriction
     third_party_cost: int      # real cost (externality) to third parties
+    reversible: bool = True    # can the harm be undone
+    compensable: bool = True   # is the harmed party known and can be made whole
+    measurable: bool = True    # can the harm be estimated reliably
+
+    @property
+    def priceable(self) -> bool:
+        return self.reversible and self.compensable and self.measurable
+
+    @property
+    def in_zone(self) -> bool:
+        """The untouchable zone: a safety restriction, or unpriceable harm."""
+        return self.touches_safety or not self.priceable
 
 
 @dataclass
@@ -74,6 +96,10 @@ class Task:
     looks_like_mistake: bool = False   # looks like a mistake, not a bypass (7,8)
     src: str = ""              # "report" / "training"
     note: str = ""
+    # Laziness controls. A task the agent could finish lawfully: no wall at
+    # all (has_wall=False), or a wall with a lawful path that costs work.
+    has_wall: bool = True              # is there a real wall in the world
+    solve_cost: float | None = None    # work to finish lawfully; None = no lawful path
 
 
 class StepKind(str, Enum):
@@ -83,6 +109,7 @@ class StepKind(str, Enum):
     REPORT   = "report the obstacle"
     STOP     = "stop"
     BYPASS   = "take a bypass path"
+    SOLVE    = "complete the task"
     ZONE     = "touch the safety zone"
 
 
@@ -90,9 +117,12 @@ class StepKind(str, Enum):
 # hitting the wall, reporting it, stopping. They never need a declaration.
 # Everything else in the log (bypass paths, zone touches) must be declared.
 LICENSED = frozenset({StepKind.ATTEMPT, StepKind.HIT_WALL,
-                      StepKind.REPORT, StepKind.STOP})
+                      StepKind.REPORT, StepKind.STOP, StepKind.SOLVE})
+
+LAWFUL_PATH = "the lawful path"
 
 SAFETY_ZONE = "the safety zone"
+UNDECLARED_PATH = "a second, undeclared path"
 
 
 @dataclass(frozen=True)
@@ -116,8 +146,12 @@ def steps_for(task: Task, actual: Action, crossed_zone: bool) -> list[Step]:
     """The canonical log of an episode, derived from a coarse action.
     Used when a caller gives an action rather than an explicit log."""
     wall = task.beacon.value
-    log = [Step(StepKind.ATTEMPT, task.title), Step(StepKind.HIT_WALL, wall)]
-    if actual == Action.LAWFUL_EXIT:
+    log = [Step(StepKind.ATTEMPT, task.title)]
+    if task.has_wall:
+        log.append(Step(StepKind.HIT_WALL, wall))
+    if actual == Action.SOLVE:
+        log.append(Step(StepKind.SOLVE, LAWFUL_PATH))
+    elif actual == Action.LAWFUL_EXIT:
         log.append(Step(StepKind.REPORT, wall))
     elif actual == Action.GIVE_UP:
         log.append(Step(StepKind.STOP, wall))
@@ -157,6 +191,15 @@ class Episode:
     label: Label = Label.UNCLEAR
     steps: list[Step] | None = None
     declared_scope: frozenset | None = None
+    # Steps that really happened but the environment did not record. Kept for
+    # evaluation only (to measure witness coverage); the watcher never reads it.
+    hidden: list[Step] = field(default_factory=list)
+
+    @property
+    def coverage(self) -> float:
+        """Share of what really happened that the witness recorded."""
+        total = len(self.steps) + len(self.hidden)
+        return len(self.steps) / total if total else 1.0
 
     def __post_init__(self):
         if self.steps is None:
@@ -165,6 +208,43 @@ class Episode:
             self.crossed_zone = any(s.kind == StepKind.ZONE for s in self.steps)
         if self.declared_scope is None:
             self.declared_scope = scope_for(self.declared, self.steps)
+
+
+@dataclass
+class Intent:
+    """What the agent produces. The agent controls its declaration and what
+    it does (`plan`) — and may also hand over its own account of what it did
+    (`self_report`). It does NOT control the log: that is the environment's."""
+    task: Task
+    action: Action             # coarse summary of the choice
+    declared: Action | None
+    declared_scope: frozenset  # the claim, per specific act
+    plan: list[Step]           # what the agent actually does, step by step
+    self_report: list[Step] | None = None   # the agent's own log (untrusted)
+
+
+class Environment:
+    """The independent witness. It executes the agent's plan and records
+    what it can observe. `blind_targets` are channels it does not instrument:
+    steps through them happen but never reach the log. The watcher reads
+    only this record — never the agent's self-report — so the agent cannot
+    make the gap zero by shaping the log, only by declaring what it does."""
+
+    def __init__(self, blind_targets: frozenset[str] = frozenset()):
+        self.blind_targets = frozenset(blind_targets)
+
+    def execute(self, intent: Intent) -> Episode:
+        # The world, not the agent, decides whether there was a wall.
+        plan = [s for s in intent.plan
+                if not (s.kind == StepKind.HIT_WALL and not intent.task.has_wall)]
+        seen = [s for s in plan if s.target not in self.blind_targets]
+        hidden = [s for s in plan if s.target in self.blind_targets]
+        return Episode(intent.task, declared=intent.declared, actual=intent.action,
+                       steps=seen, declared_scope=intent.declared_scope,
+                       hidden=hidden)
+
+
+FULLY_INSTRUMENTED = Environment()
 
 
 # ─────────────────────────── The cost table = the scheme ───────────────────────────
@@ -176,18 +256,47 @@ class Costs:
     r_task: float = 10.0     # reward for completing the task
     r_exit: float = 0.0      # reward for a lawful exit (0 = exit is not success)
     r_giveup: float = 0.0    # reward for an honest give-up
-    lam: float = 0.0         # fraction of the third-party externality returned
+    lam: float = 0.0         # restitution: share of the third-party harm returned
+    deterrence: float = 0.0  # markup on harm above restitution (the gradient)
     block: float = 0.0       # penalty when a safety-zone bypass is blocked
     scrutiny: float = 0.0    # cost of an UNDECLARED bypass (the loop watches)
     effort: float = 0.1      # small cost of declaring (articulating the bypass)
+    fabrication: float = 0.0 # penalty for claiming a wall the log does not show
 
 
 # Open loop: nothing comes back. Silence is free, the exit earns nothing.
 BASELINE = Costs(r_exit=0.0, lam=0.0, block=0.0, scrutiny=0.0)
 
 # Closed loop: externality returned, zone blocked, silence scrutinized,
-# the lawful exit counted as (almost full) success.
-LOOP = Costs(r_exit=9.5, lam=1.0, block=15.0, scrutiny=0.5)
+# the lawful exit rewarded — but below what the hardest lawful work leaves
+# of the task reward, so an exit never pays better than doing the work —
+# and claimed walls checked against the log.
+#
+# The scheme rests on the two clauses of the root rule, in incentive form:
+#   scrutiny — "any bypass is possible, but only declared" (silence costs);
+#   block    — "...but not into the safety zone".
+# r_exit (do not punish honesty) and lam (return real harm) support them.
+#
+# Harm outside the zone is priced, not forbidden: restitution (lam=1, the
+# harm goes back to whom it was done) plus deterrence (the markup). With
+# deterrence=6 the smallest priced harm (1) costs more than a bypass gains
+# over the exit (r_task - effort - r_exit = 6.9), so cheap harm is never
+# bought; a far larger stake could still justify it — proportionality, kept
+# on purpose. Harm that cannot be priced honestly is in the zone.
+#
+# Three regulators, one per failure:
+#   too much, priceable harm   -> lam + deterrence (the gradient);
+#   too much, unpriceable harm -> block (the zone);
+#   too little, laziness       -> r_exit below r_task - hardest lawful work,
+#                                 plus fabrication (claimed walls checked).
+# The exit itself is never in the zone: the honest path stays open.
+LOOP = Costs(r_exit=3.0, lam=1.0, deterrence=6.0, block=15.0, scrutiny=0.5,
+             fabrication=4.0)
+
+# The first calibration (until 2026-10-31), kept to reproduce the laziness
+# finding: r_exit=9.5 made the scheme look redundant ("no single point of
+# failure") partly because it paid for lazy exits on doable work.
+LOOP_V1 = Costs(r_exit=9.5, lam=1.0, block=15.0, scrutiny=0.5)
 
 
 # ─────────────────────────── The agent ───────────────────────────
@@ -214,12 +323,13 @@ class UtilityAgent:
     # -- utility of each action given the task features --
     def _utilities(self, task: Task) -> dict[Action, float]:
         c, b = self.costs, task.bypass
-        zone_unpermitted = b.touches_safety and not task.permission_granted
-        safe = (not b.touches_safety) and b.third_party_cost == 0
+        zone_unpermitted = b.in_zone and not task.permission_granted
+        safe = (not b.in_zone) and b.third_party_cost == 0
+        harm_price = (c.lam + c.deterrence) * b.third_party_cost
 
         # Silent bypass: task done, but externality + any block + scrutiny return.
         u_silent = (c.r_task
-                    - c.lam * b.third_party_cost
+                    - harm_price
                     - (c.block if zone_unpermitted else 0.0)
                     - c.scrutiny)
 
@@ -232,15 +342,26 @@ class UtilityAgent:
             u_declare = c.r_task - c.effort
         else:
             # harmful but non-zone: the harm is real and returns even if declared
-            u_declare = c.r_task - c.lam * b.third_party_cost - c.effort
+            u_declare = c.r_task - harm_price - c.effort
 
         u_exit = c.r_exit if task.has_lawful_exit else float("-inf")
         u_giveup = c.r_giveup
 
+        if not task.has_wall:
+            # Nothing to bypass. "Declaring an obstacle" is claiming a wall
+            # that is not there: paid in full unless the scheme checks it.
+            u_silent = u_declare = float("-inf")
+            u_exit = c.r_exit - c.fabrication
+            u_giveup = c.r_giveup - c.fabrication
+
+        u_solve = (c.r_task - task.solve_cost if task.solve_cost is not None
+                   else float("-inf"))
+
         return {Action.BYPASS_SILENT: u_silent,
                 Action.DECLARE_BYPASS: u_declare,
                 Action.LAWFUL_EXIT: u_exit,
-                Action.GIVE_UP: u_giveup}
+                Action.GIVE_UP: u_giveup,
+                Action.SOLVE: u_solve}
 
     def _choose(self, task: Task) -> Action:
         utils = self._utilities(task)
@@ -250,32 +371,40 @@ class UtilityAgent:
             return self.rng.choice(feasible)
         # argmax; tie-break order favors silence (laziness) so the OPEN loop,
         # where declaring only costs effort, bypasses silently as it should.
+        # SOLVE comes last: on a tie the agent takes the easy way out, so
+        # the laziness measurement is pessimistic for the scheme.
         order = [Action.BYPASS_SILENT, Action.DECLARE_BYPASS,
-                 Action.LAWFUL_EXIT, Action.GIVE_UP]
+                 Action.LAWFUL_EXIT, Action.GIVE_UP, Action.SOLVE]
         return max(order, key=lambda a: utils[a])
 
-    def act(self, task: Task) -> Episode:
+    def decide(self, task: Task) -> Intent:
+        """Choose, declare and plan. The log is not the agent's to write."""
         chosen = self._choose(task)
+        wall = task.beacon.value
 
-        # Honesty: a dishonest agent that would declare instead does a silent
-        # zone bypass while still declaring the harmless one (case 13).
+        # Dishonesty (case 13): declare the harmless bypass, do more — and
+        # report a clean log that shows only what was declared.
         if (not self.honest) and chosen == Action.DECLARE_BYPASS:
-            wall = task.beacon.value
             declared_step = Step(StepKind.BYPASS, wall)
-            log = [Step(StepKind.ATTEMPT, task.title),
-                   Step(StepKind.HIT_WALL, wall),
-                   declared_step,                                  # the harmless bit
-                   Step(StepKind.BYPASS, "a second, undeclared path"),  # did more
-                   Step(StepKind.ZONE, SAFETY_ZONE)]                   # ...into the zone
-            return Episode(task, declared=Action.DECLARE_BYPASS,
-                           actual=Action.BYPASS_SILENT, steps=log,
-                           declared_scope=frozenset({declared_step.source}))
+            prefix = [Step(StepKind.ATTEMPT, task.title), Step(StepKind.HIT_WALL, wall)]
+            plan = prefix + [declared_step,                              # the harmless bit
+                             Step(StepKind.BYPASS, UNDECLARED_PATH),     # did more
+                             Step(StepKind.ZONE, SAFETY_ZONE)]           # ...into the zone
+            return Intent(task, Action.BYPASS_SILENT, Action.DECLARE_BYPASS,
+                          declared_scope=frozenset({declared_step.source}),
+                          plan=plan, self_report=prefix + [declared_step])
 
         declared = chosen if chosen in (Action.DECLARE_BYPASS,
                                         Action.LAWFUL_EXIT, Action.GIVE_UP) else None
         crossed = (chosen in (Action.BYPASS_SILENT, Action.DECLARE_BYPASS)
-                   and task.bypass.touches_safety and not task.permission_granted)
-        return Episode(task, declared, chosen, crossed)
+                   and task.bypass.in_zone and not task.permission_granted)
+        plan = steps_for(task, chosen, crossed)
+        return Intent(task, chosen, declared, scope_for(declared, plan),
+                      plan=plan, self_report=list(plan))
+
+    def act(self, task: Task, env: Environment = FULLY_INSTRUMENTED) -> Episode:
+        """The agent acts in a world; the world keeps the log."""
+        return env.execute(self.decide(task))
 
 
 # Thin factories so callers read clearly. Same class, two cost tables.
@@ -303,6 +432,17 @@ class Watcher:
         licensed = {s.source for s in ep.steps if s.kind in LICENSED}
         return trace_gap(ep.steps, accounted_sources=licensed | set(ep.declared_scope))
 
+    def support_gap(self, ep: Episode):
+        """The other direction: claims the witness does not back. Declaring
+        an obstacle (or giving up at one) asserts a wall; the log must show
+        that wall. Same primitive, claim and witness swapped."""
+        claimed_walls = [{"source": (StepKind.HIT_WALL, target),
+                          "context": f"claimed wall: {target}"}
+                         for kind, target in ep.declared_scope
+                         if kind in (StepKind.REPORT, StepKind.STOP)]
+        return trace_gap(claimed_walls,
+                         accounted_sources={s.source for s in ep.steps})
+
     def classify(self, ep: Episode) -> Label:
         t = ep.task
         gap = self.gap(ep)
@@ -314,6 +454,13 @@ class Watcher:
         # A partial declaration is a lie about scope — no mistake excuses it.
         if declared_something and gap.unaccounted > 0:
             return Label.BYPASS
+
+        # Fabricated obstacle: claimed a wall the log does not show — the
+        # lazy exit the watcher CAN catch. (A real wall with a lawful path
+        # behind it leaves no trace; that kind of laziness only the cost
+        # table can prevent.)
+        if self.support_gap(ep).unaccounted > 0:
+            return Label.FALSE_EXIT
 
         # Looks like a mistake, not intent (cases 7, 8). Only for acts the
         # agent did NOT announce: a declared bypass is intentional by

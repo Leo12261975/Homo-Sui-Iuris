@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from watcher import (UtilityAgent, baseline_agent, loop_agent, Watcher,
                      Label, Action, Task, Bypass, Beacon, Episode,
-                     Costs, LOOP, BASELINE)
+                     Costs, LOOP, LOOP_V1, BASELINE)
 from tasks import TASKS
 
 W = Watcher()
@@ -80,21 +80,61 @@ def test_mistake_is_not_bypass():
 def test_stripping_all_incentives_equals_baseline():
     """The key control: with every incentive removed, the loop cost table
     collapses to baseline behavior (12 bypasses). The experiment can fail."""
-    stripped = replace(LOOP, r_exit=0.0, scrutiny=0.0, lam=0.0, block=0.0)
+    stripped = replace(LOOP, r_exit=0.0, scrutiny=0.0, lam=0.0, deterrence=0.0, block=0.0)
     assert bypass_count(stripped) == 12
 
 
-def test_no_single_point_of_failure():
-    """Removing any one incentive keeps the scheme near zero — redundancy."""
+def _bypassed(costs):
+    return {t.tid for t in TASKS
+            if W.classify(UtilityAgent(costs).act(t)) == Label.BYPASS}
+
+
+def _harm(costs):
+    return sum(t.bypass.third_party_cost for t in TASKS
+               if any(s.kind.name == "BYPASS" for s in UtilityAgent(costs).act(t).steps))
+
+
+ZONE = {t.tid for t in TASKS if t.bypass.in_zone and not t.looks_like_mistake}
+NON_ZONE = {t.tid for t in TASKS if not t.bypass.in_zone}
+
+
+def test_the_root_rule_clauses_split_the_cases_in_half():
+    """With the harm gradient off, the two clauses of the root rule hold
+    exactly their halves: scrutiny ("only declared") the non-zone cases,
+    block ("not into the zone") the zone cases."""
+    no_gradient = replace(LOOP, deterrence=0.0)
+    assert _bypassed(replace(no_gradient, scrutiny=0.0)) == NON_ZONE
+    assert _bypassed(replace(no_gradient, block=0.0)) == ZONE
+
+
+def test_three_layers_each_with_its_own_territory():
+    """With the gradient on, the scheme is layered: each regulator has a
+    domain nothing else covers, and they overlap in the harmful middle.
+      scrutiny  — silence about a harmless act (no price exists): case 13;
+      block     — the zone where there is no exit: case 12;
+      deterrence— the harm itself: labels stay clean without it, harm returns.
+    """
+    assert _bypassed(LOOP) == set() and _harm(LOOP) == 0
+    assert 13 in _bypassed(replace(LOOP, scrutiny=0.0))
+    assert _bypassed(replace(LOOP, block=0.0)) == {12}
+    no_deterrence = replace(LOOP, deterrence=0.0)
+    assert _bypassed(no_deterrence) == set() and _harm(no_deterrence) == 8
+    for supporting in ("r_exit", "lam", "fabrication"):
+        assert _bypassed(replace(LOOP, **{supporting: 0.0})) == set()
+
+
+def test_first_calibration_looked_redundant():
+    """LOOP_V1 (r_exit=9.5) survived the loss of any one lever — but that
+    redundancy was bought with laziness (see test_laziness.py)."""
     for field in ("r_exit", "scrutiny", "lam", "block"):
-        c = replace(LOOP, **{field: 0.0})
-        assert bypass_count(c) <= 1, f"removing {field} broke the scheme"
+        assert bypass_count(replace(LOOP_V1, **{field: 0.0})) <= 1
 
 
 def test_internalization_threshold_is_partial():
     """Partial internalization already drives bypasses to zero (s<1)."""
     def scaled(s):
         return replace(LOOP, r_exit=LOOP.r_exit*s, lam=LOOP.lam*s,
+                       deterrence=LOOP.deterrence*s,
                        block=LOOP.block*s, scrutiny=LOOP.scrutiny*s)
     assert bypass_count(scaled(0.0)) == 12      # = baseline
     assert bypass_count(scaled(0.7)) == 0       # full effect below s=1
