@@ -43,6 +43,15 @@ accounts for. A gap is a *lie or silence*; an honestly declared zone touch
 leaves no gap but is still a bypass by the root rule — two different findings.
 A declared bypass is never excused as "looks like a mistake".
 
+**Laziness.** An exit is honest about the wall and silent about what lies
+behind it. Two cases: a *claimed* wall the log does not show (no wall in the
+world) — the watcher's `support_gap` runs `trace_gap` the other way round
+(claim checked against witness) and labels it `false exit`; and a *real*
+wall with a lawful path behind it — the log backs the exit, the watcher
+cannot see it, and only the cost table prevents it: the agent exits exactly
+when `r_exit ≥ r_task − solve_cost`. So `r_exit` has a ceiling set by the
+hardest lawful work you want done, and cannot carry the anti-bypass load.
+
 **Who writes the log.** The agent produces an `Intent` — its declaration, what
 it does (`plan`), and optionally its own account (`self_report`). It does not
 write the log: an `Environment` executes the plan and records what it can see.
@@ -97,7 +106,10 @@ cross-check caught.
    table one at a time. Removing any single one keeps the scheme near zero;
    removing several brings bypasses back; removing all reproduces baseline
    (12). So behavior tracks the cost table, not the watcher's label — and
-   the scheme has **no single point of failure**.
+   the scheme has **no single point of failure** — at the published
+   `r_exit=9.5`. That redundancy is partly bought with laziness (see §4 of
+   the sweep): at an `r_exit` low enough not to pay for lazy exits,
+   `scrutiny` and `block` each become load-bearing.
 2. **Internalization sweep** (`sweep.py`). Scale all loop incentives by a
    factor `s` from 0 (= baseline) to 1 (= full loop). Bypasses fall from 12
    to 0; **partial** internalization (`s≈0.3–0.7`) already suffices — the

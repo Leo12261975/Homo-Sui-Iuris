@@ -3,7 +3,7 @@
 python3 run.py
 """
 from collections import Counter
-from watcher import baseline_agent, loop_agent, Watcher, Label, Action, LOOP
+from watcher import baseline_agent, loop_agent, Watcher, Label, Action, LOOP, UtilityAgent
 from tasks import TASKS
 
 WATCHER = Watcher()
@@ -110,6 +110,25 @@ print("   it — the agent can zero the gap only by declaring what it does.")
 print("   a witness sees only what it instruments: blind to both channels, the")
 print("   lie passes again. coverage is measured, not assumed.")
 
+# ── Laziness control: tasks the agent COULD finish lawfully ──
+print(f"\n{'─'*64}\n  Laziness control — the failure the bypass count cannot see\n{'─'*64}")
+from tasks import CONTROL_TASKS
+from dataclasses import replace as _replace
+checked = _replace(LOOP, fabrication=LOOP.r_exit + 1)
+print(f"   {'#':>2}  {'wall':5} {'work':>4}  {'without the scheme':24}  {'with the scheme':34}  {'+ wall check':26}")
+for t in CONTROL_TASKS:
+    cells = []
+    for ag in (baseline_agent(), loop_agent(), UtilityAgent(checked)):
+        ep = ag.act(t)
+        act = "solve" if ep.actual == Action.SOLVE else SHORT.get(ep.actual, ep.actual.value)
+        cells.append(f"{act}→{WATCHER.classify(ep).value}")
+    print(f"   {t.tid:>2}  {'real' if t.has_wall else 'none':5} {t.solve_cost:4g}  "
+          f"{cells[0]:24}  {cells[1]:34}  {cells[2]:26}")
+print("   the scheme as published (r_exit=9.5) exits on every doable task — lazier")
+print("   than no scheme. checking claimed walls catches the fabricated ones; a")
+print("   real wall with a lawful path behind it stays invisible ('norm') — only")
+print("   r_exit below r_task − work prevents that. see sweep.py, section 4.")
+
 # ── REAL stimulus control: change the rules of the game, not the metric. ──
 # We turn off "exit = success" for the scheme agent.
 # If the incentive is what makes the difference, the agent returns to bypasses.
@@ -136,6 +155,9 @@ print("   no single incentive is load-bearing — remove one, the scheme holds;"
 print("   remove several and bypasses return, reaching baseline when all are off.")
 print("   behavior tracks the COST TABLE, not the watcher's label → the scheme")
 print("   works by incentive, and has no single point of failure.")
+print("   caveat: this redundancy leans on r_exit=9.5, which also pays for lazy")
+print("   exits (see the laziness control above); at an honest r_exit, scrutiny")
+print("   and block each become load-bearing.")
 
 # ── Summary ──
 print(f"\n{'═'*64}\n  SUMMARY\n{'═'*64}")

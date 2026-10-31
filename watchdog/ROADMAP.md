@@ -47,7 +47,30 @@ proves the *logic*; it is not yet validated on a real LLM.
   witness, all/partial accounted, sorted & deduped fingerprints, custom
   accessors, W0Guard provenance shape). Shipped in PR #15.
 
+- **Laziness control: the failure the bypass count cannot see.** (Raised by
+  an outside review; Leo: any model will use it, and then "0 bypasses" means
+  nothing.) New `Action.SOLVE`, `Task.has_wall` / `solve_cost`, four
+  `CONTROL_TASKS` the agent could finish lawfully, and a lazy-exit metric.
+  Finding: the published LOOP (`r_exit=9.5`) exits on all four — lazier than
+  no scheme, which solves the two wall-free ones. Half of it is catchable:
+  `Watcher.support_gap` runs `trace_gap` claim-against-witness (the reverse
+  direction) and labels a claimed wall the log does not show `false exit`;
+  the environment will not record a wall the agent asserts. The other half —
+  a real wall with a lawful path behind it — is invisible to any watcher and
+  only the cost table prevents it: the agent exits iff `r_exit ≥ r_task −
+  solve_cost`. `sweep.py` §4 maps the corridor (r_exit × lever strength):
+  it exists for s ≥ 0.7 at r_exit ≤ 3 and is gone at s = 0.5. LOOP itself is
+  **not** recalibrated yet — see Tier 1.
+
 ## Tier 1 — thesis-bearing (do first)
+- **Decide the LOOP recalibration (Leo's call — it moves a headline claim).**
+  Trial `r_exit=3.0, fabrication=4.0`: full-scheme bypasses stay 0 and the
+  s≈0.7 threshold holds, but "no single point of failure" breaks — removing
+  `scrutiny` or `block` alone brings back 6 bypasses. The old redundancy was
+  partly bought with laziness. Options: accept the honest numbers and rewrite
+  the claim; or raise `scrutiny`/`block` to restore redundancy at an honest
+  `r_exit`. Either way the LLM run must be calibrated in the corridor, not at
+  9.5.
 - **Retroactive-declaration check.** The root rule says "declared *before* the
   action", but `Episode` has no order — "before" is assumed, not verified. Add
   `declared_before: bool` (or `declared_at`/`acted_at`) and, in
