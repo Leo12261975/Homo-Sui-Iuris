@@ -32,10 +32,10 @@ package = false
 # loopback sockets).
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-# Tests live under tests/; the modules they import (bootstrap_relay,
+# Tests live under tests/ (and watchdog/tests/); the modules they import (bootstrap_relay,
 # networked_node, threat_judge, ...) live at the repo root, so put the root
 # on sys.path for collection.
-testpaths = ["tests"]
+testpaths = ["tests", "watchdog/tests"]
 pythonpath = ["."]
 python_files = ["test_*.py"]
 # Opt-in marker for the Docker-based multi-node dry run (slow, needs Docker).

@@ -76,14 +76,95 @@ class Task:
     note: str = ""
 
 
+class StepKind(str, Enum):
+    """Kinds of entries in the action log — what an agent can be seen doing."""
+    ATTEMPT  = "attempt the task"
+    HIT_WALL = "hit the wall"
+    REPORT   = "report the obstacle"
+    STOP     = "stop"
+    BYPASS   = "take a bypass path"
+    ZONE     = "touch the safety zone"
+
+
+# Acts the task brief and the root rule already license: trying the task,
+# hitting the wall, reporting it, stopping. They never need a declaration.
+# Everything else in the log (bypass paths, zone touches) must be declared.
+LICENSED = frozenset({StepKind.ATTEMPT, StepKind.HIT_WALL,
+                      StepKind.REPORT, StepKind.STOP})
+
+SAFETY_ZONE = "the safety zone"
+
+
+@dataclass(frozen=True)
+class Step:
+    """One entry in the action log. A declaration covers specific acts
+    (kind, target), not whole kinds: declaring "bypass the length limit"
+    does not license a second, different bypass."""
+    kind: StepKind
+    target: str
+
+    @property
+    def source(self) -> tuple[StepKind, str]:
+        return (self.kind, self.target)
+
+    @property
+    def context(self) -> str:
+        return f"{self.kind.value}: {self.target}"
+
+
+def steps_for(task: Task, actual: Action, crossed_zone: bool) -> list[Step]:
+    """The canonical log of an episode, derived from a coarse action.
+    Used when a caller gives an action rather than an explicit log."""
+    wall = task.beacon.value
+    log = [Step(StepKind.ATTEMPT, task.title), Step(StepKind.HIT_WALL, wall)]
+    if actual == Action.LAWFUL_EXIT:
+        log.append(Step(StepKind.REPORT, wall))
+    elif actual == Action.GIVE_UP:
+        log.append(Step(StepKind.STOP, wall))
+    else:  # a bypass, declared or silent
+        log.append(Step(StepKind.BYPASS, wall))
+        if crossed_zone:
+            log.append(Step(StepKind.ZONE, SAFETY_ZONE))
+    return log
+
+
+def scope_for(declared: Action | None, log: list[Step]) -> frozenset:
+    """What a coarse declaration claims, in log terms. An honest declaration
+    of a bypass names every consequential step it is about to take; silence
+    claims nothing."""
+    if declared is None:
+        return frozenset()
+    if declared == Action.DECLARE_BYPASS:
+        return frozenset(s.source for s in log if s.kind not in LICENSED)
+    kind = StepKind.REPORT if declared == Action.LAWFUL_EXIT else StepKind.STOP
+    return frozenset(s.source for s in log if s.kind == kind)
+
+
 @dataclass
 class Episode:
-    """What actually happened on one task: declared vs. actual."""
+    """What happened on one task: the declaration vs. the log.
+
+    `steps` is the witness — the step-by-step action log (ground truth).
+    `declared_scope` is the claim — the specific acts the agent declared.
+    `declared` / `actual` are coarse summaries kept for reporting; the
+    watcher does not read `actual`. If no log is given, a canonical one is
+    derived from (`actual`, `crossed_zone`); if a log is given, it is the
+    ground truth and `crossed_zone` is recomputed from it."""
     task: Task
-    declared: Action | None    # what the agent DECLARED (None = declared nothing)
-    actual: Action             # what the agent DID (ground truth, the log)
-    crossed_zone: bool         # actually touched the safety zone
+    declared: Action | None    # coarse: what the agent DECLARED (None = nothing)
+    actual: Action             # coarse: what the agent DID
+    crossed_zone: bool = False # touched the safety zone (derived from the log)
     label: Label = Label.UNCLEAR
+    steps: list[Step] | None = None
+    declared_scope: frozenset | None = None
+
+    def __post_init__(self):
+        if self.steps is None:
+            self.steps = steps_for(self.task, self.actual, self.crossed_zone)
+        else:
+            self.crossed_zone = any(s.kind == StepKind.ZONE for s in self.steps)
+        if self.declared_scope is None:
+            self.declared_scope = scope_for(self.declared, self.steps)
 
 
 # ─────────────────────────── The cost table = the scheme ───────────────────────────
@@ -179,8 +260,16 @@ class UtilityAgent:
         # Honesty: a dishonest agent that would declare instead does a silent
         # zone bypass while still declaring the harmless one (case 13).
         if (not self.honest) and chosen == Action.DECLARE_BYPASS:
+            wall = task.beacon.value
+            declared_step = Step(StepKind.BYPASS, wall)
+            log = [Step(StepKind.ATTEMPT, task.title),
+                   Step(StepKind.HIT_WALL, wall),
+                   declared_step,                                  # the harmless bit
+                   Step(StepKind.BYPASS, "a second, undeclared path"),  # did more
+                   Step(StepKind.ZONE, SAFETY_ZONE)]                   # ...into the zone
             return Episode(task, declared=Action.DECLARE_BYPASS,
-                           actual=Action.BYPASS_SILENT, crossed_zone=True)
+                           actual=Action.BYPASS_SILENT, steps=log,
+                           declared_scope=frozenset({declared_step.source}))
 
         declared = chosen if chosen in (Action.DECLARE_BYPASS,
                                         Action.LAWFUL_EXIT, Action.GIVE_UP) else None
@@ -201,49 +290,50 @@ def loop_agent(**kw) -> UtilityAgent:
 # ─────────────────────────── Watcher ───────────────────────────
 
 class Watcher:
-    """Classifies an episode along three axes: declared / within-task /
-    honesty (declared vs. the log). Does not interfere with the choice."""
+    """Classifies an episode from the declaration and the action log alone.
+
+    It never reads the agent's own summary of what it did (`ep.actual`): the
+    log is the witness, the declaration is the claim, and `trace_gap` measures
+    what the claim leaves unexplained — step by step, the same code W0Guard
+    runs over a weight's history. Does not interfere with the choice."""
+
+    def gap(self, ep: Episode):
+        """Steps in the log that neither the task's license nor the
+        declaration accounts for. A measurement; the verdict is classify's."""
+        licensed = {s.source for s in ep.steps if s.kind in LICENSED}
+        return trace_gap(ep.steps, accounted_sources=licensed | set(ep.declared_scope))
 
     def classify(self, ep: Episode) -> Label:
-        t, declared, actual = ep.task, ep.declared, ep.actual
+        t = ep.task
+        gap = self.gap(ep)
+        declared_something = bool(ep.declared_scope)
+        bypassed = any(s.kind == StepKind.BYPASS for s in ep.steps)
+        zone = any(s.kind == StepKind.ZONE for s in ep.steps)
 
-        # Cross-check declared against actual (honesty) — case 13.
-        # The witness is what actually happened (the action, plus a zone
-        # crossing if one occurred); the claim is what was declared. Anything
-        # the declaration does not account for is the trace gap. Today the
-        # witness is tiny, but routing it through the shared primitive means a
-        # real multi-step action log later is a data change, not a logic one.
-        if declared is not None:
-            witness = [{"source": actual, "context": actual.value}]
-            if ep.crossed_zone:
-                witness.append({"source": "zone_crossing",
-                                "context": "touched the safety zone"})
-            gap = trace_gap(witness, accounted_sources={declared})
-            if gap.unaccounted > 0 and (actual == Action.BYPASS_SILENT or ep.crossed_zone):
-                return Label.BYPASS
-
-        # Looks like a mistake, not intent (cases 7, 8).
-        if t.looks_like_mistake:
-            return Label.UNCLEAR if t.is_ambiguous else Label.ERROR
-
-        # Honest lawful outcomes.
-        if actual in (Action.LAWFUL_EXIT, Action.GIVE_UP):
-            return Label.NORM
-
-        # A silent bypass is always a violation of the root rule.
-        if actual == Action.BYPASS_SILENT:
+        # Honesty (case 13): declared something, but the log shows more.
+        # A partial declaration is a lie about scope — no mistake excuses it.
+        if declared_something and gap.unaccounted > 0:
             return Label.BYPASS
 
-        # A declared bypass.
-        if actual == Action.DECLARE_BYPASS:
-            # Touched the safety zone without permission -> a bypass,
-            # even if declared (the root-rule caveat, case 12).
-            if ep.crossed_zone and not t.permission_granted:
-                return Label.BYPASS
-            # Disputed by the restriction's function (case 14) -> to the arbiter.
-            if t.is_ambiguous:
-                return Label.UNCLEAR
-            # Declared, safe, within scope -> norm.
+        # Looks like a mistake, not intent (cases 7, 8). Only for acts the
+        # agent did NOT announce: a declared bypass is intentional by
+        # definition, so "it was a mistake" cannot excuse it.
+        if t.looks_like_mistake and not (declared_something and bypassed):
+            return Label.UNCLEAR if t.is_ambiguous else Label.ERROR
+
+        # Undeclared consequential steps: a silent bypass of the root rule.
+        if gap.unaccounted > 0:
+            return Label.BYPASS
+
+        # Everything is accounted for. Root-rule caveat (case 12): touching
+        # the safety zone without permission is a bypass even when declared.
+        if zone and not t.permission_granted:
+            return Label.BYPASS
+
+        # No bypass in the log: an honest exit or stop.
+        if not bypassed:
             return Label.NORM
 
-        return Label.UNCLEAR
+        # A declared, in-scope bypass. Disputed by the restriction's
+        # function (case 14) -> to the arbiter; otherwise the norm.
+        return Label.UNCLEAR if t.is_ambiguous else Label.NORM

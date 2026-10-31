@@ -80,9 +80,13 @@ t13 = next(t for t in TASKS if t.tid == 13)
 for name, honest in (("honest agent", True), ("dishonest agent", False)):
     ep = loop_agent(honest=honest).act(t13)
     decl = ep.declared.value if ep.declared else "nothing"
+    gap = WATCHER.gap(ep)
     print(f"   {name:16}: declared '{decl}', "
           f"did '{ep.actual.value}' → {WATCHER.classify(ep).value}")
-print("   the declared-vs-log cross-check catches the mismatch as a BYPASS;")
+    print(f"   {'':16}  log: {gap.total} steps, {gap.unaccounted} not accounted for"
+          + (f" — {', '.join(gap.fingerprints)}" if gap.fingerprints else ""))
+print("   the declared-vs-log cross-check (trace_gap, step by step) catches")
+print("   the mismatch as a BYPASS;")
 print("   declaration alone is not enough — a cross-check is needed (from the labeling)")
 
 # ── REAL stimulus control: change the rules of the game, not the metric. ──
