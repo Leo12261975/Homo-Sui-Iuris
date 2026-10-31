@@ -16,7 +16,7 @@ Three questions, all dependency-free (stdlib only):
 from dataclasses import replace
 import random
 
-from watcher import UtilityAgent, Watcher, Label, LOOP, BASELINE
+from watcher import UtilityAgent, Watcher, Label, LOOP, LOOP_V1, BASELINE
 from tasks import TASKS, CONTROL_TASKS
 from watcher import Action
 
@@ -118,8 +118,9 @@ def laziness_corridor():
     hardest = max(t.solve_cost for t in CONTROL_TASKS)
     print(f"\n   laziness starts once r_exit ≥ r_task − solve_cost, ties go to the exit "
           f"\n   (hardest lawful work here: {hardest:g} → r_exit must stay below {LOOP.r_task - hardest:g}).")
-    print(f"   the published LOOP (r_exit={LOOP.r_exit}) sits far past that ceiling:")
-    print(f"   lazy exits under LOOP as published: {lazy_exits(LOOP)}/{len(CONTROL_TASKS)}.")
+    print(f"   first calibration (r_exit={LOOP_V1.r_exit:g}): lazy exits "
+          f"{lazy_exits(LOOP_V1)}/{len(CONTROL_TASKS)};  "
+          f"current LOOP (r_exit={LOOP.r_exit:g}): {lazy_exits(LOOP)}/{len(CONTROL_TASKS)}.")
     print("   the corridor exists only at s ≥ 0.7 and is gone at s=0.5:")
     print("   r_exit cannot carry the scheme alone — it may only stop punishing honesty.")
 

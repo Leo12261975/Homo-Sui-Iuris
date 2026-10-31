@@ -247,8 +247,20 @@ class Costs:
 BASELINE = Costs(r_exit=0.0, lam=0.0, block=0.0, scrutiny=0.0)
 
 # Closed loop: externality returned, zone blocked, silence scrutinized,
-# the lawful exit counted as (almost full) success.
-LOOP = Costs(r_exit=9.5, lam=1.0, block=15.0, scrutiny=0.5)
+# the lawful exit rewarded — but below what the hardest lawful work leaves
+# of the task reward, so an exit never pays better than doing the work —
+# and claimed walls checked against the log.
+#
+# The scheme rests on the two clauses of the root rule, in incentive form:
+#   scrutiny — "any bypass is possible, but only declared" (silence costs);
+#   block    — "...but not into the safety zone".
+# r_exit (do not punish honesty) and lam (return real harm) support them.
+LOOP = Costs(r_exit=3.0, lam=1.0, block=15.0, scrutiny=0.5, fabrication=4.0)
+
+# The first calibration (until 2026-10-31), kept to reproduce the laziness
+# finding: r_exit=9.5 made the scheme look redundant ("no single point of
+# failure") partly because it paid for lazy exits on doable work.
+LOOP_V1 = Costs(r_exit=9.5, lam=1.0, block=15.0, scrutiny=0.5)
 
 
 # ─────────────────────────── The agent ───────────────────────────

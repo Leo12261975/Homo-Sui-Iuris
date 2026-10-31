@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from watcher import (UtilityAgent, baseline_agent, loop_agent, Watcher,
                      Label, Action, Task, Bypass, Beacon, Episode,
-                     Costs, LOOP, BASELINE)
+                     Costs, LOOP, LOOP_V1, BASELINE)
 from tasks import TASKS
 
 W = Watcher()
@@ -84,11 +84,32 @@ def test_stripping_all_incentives_equals_baseline():
     assert bypass_count(stripped) == 12
 
 
-def test_no_single_point_of_failure():
-    """Removing any one incentive keeps the scheme near zero — redundancy."""
+def test_scheme_rests_on_the_two_clauses_of_the_root_rule():
+    """At an honest calibration the scheme has two load-bearing levers, and
+    they are the root rule in incentive form. Each holds exactly its half:
+    remove scrutiny ("only declared") → bypasses return on the non-zone
+    tasks; remove block ("not into the zone") → on the zone tasks. The
+    supporting levers can go without a single bypass coming back."""
+    def which(costs):
+        return {t.tid for t in TASKS
+                if W.classify(UtilityAgent(costs).act(t)) == Label.BYPASS}
+    zone = {t.tid for t in TASKS
+            if t.bypass.touches_safety and not t.looks_like_mistake}
+    non_zone = {t.tid for t in TASKS if not t.bypass.touches_safety}
+
+    assert which(replace(LOOP, scrutiny=0.0)) == non_zone
+    assert which(replace(LOOP, block=0.0)) == zone
+    for supporting in ("r_exit", "lam", "fabrication"):
+        assert which(replace(LOOP, **{supporting: 0.0})) == set()
+    root_rule_only = replace(LOOP, r_exit=0.0, lam=0.0, fabrication=0.0)
+    assert which(root_rule_only) == set()
+
+
+def test_first_calibration_looked_redundant():
+    """LOOP_V1 (r_exit=9.5) survived the loss of any one lever — but that
+    redundancy was bought with laziness (see test_laziness.py)."""
     for field in ("r_exit", "scrutiny", "lam", "block"):
-        c = replace(LOOP, **{field: 0.0})
-        assert bypass_count(c) <= 1, f"removing {field} broke the scheme"
+        assert bypass_count(replace(LOOP_V1, **{field: 0.0})) <= 1
 
 
 def test_internalization_threshold_is_partial():

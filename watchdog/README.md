@@ -49,14 +49,16 @@ schemes are literally two cost tables fed to the same agent:
 
 | lever      | open loop | closed loop | meaning |
 |------------|-----------|-------------|---------|
-| `r_exit`   | 0 | 9.5 | reward for the lawful exit (0 = not success) |
+| `r_exit`   | 0 | 3.0 | reward for the lawful exit — below r_task minus the hardest lawful work (first calibration: 9.5) |
 | `λ`        | 0 | 1.0 | fraction of the third-party externality returned |
 | `block`    | 0 | 15  | penalty for a safety-zone bypass |
 | `scrutiny` | 0 | 0.5 | cost of an undeclared (silent) bypass |
+| `fabrication` | 0 | 4.0 | penalty for claiming a wall the log does not show |
 
 In the open loop, declaring only costs effort and earns nothing, so the
 agent bypasses silently everywhere. In the closed loop, the same maximizer
-finds the lawful exit — or a declared safe bypass — to be the best move.
+finds the lawful exit, the lawful work, or a declared bypass outside the
+zone (paying for any harm) to be the best move.
 If even a self-interested agent goes honest under this table, that argues
 the scheme, not the labeling.
 
@@ -83,25 +85,31 @@ the scheme, not the labeling.
 |---|---|---|
 | bypasses (watcher's label) | 12 | 0 |
 | of which touched the safety zone | 8 | 0 |
-| tasks closed honestly | 12/14 | 12/14 |
+| tasks closed honestly | 12/14 | 11/14 (case 14 to the arbiter) |
+| third-party harm done | 26 | 8 (declared, paid via λ) |
+| lazy exits on doable control tasks | — (bypasses instead) | 0/4 (first calibration: 4/4) |
 
-The closed loop removes bypasses without losing closed tasks. But the
+The closed loop removes bypasses and does the doable work. But the
 numbers do not prove themselves — three controls do that:
 
 - **Stimulus decomposition.** Strip the loop's incentives one at a time.
-  Removing any single one keeps the scheme near zero; removing several brings
-  bypasses back; removing all reproduces baseline (12). Behavior tracks the
-  cost table, not the watcher's label — and the scheme has no single point
-  of failure. **Caveat (laziness control, below):** that redundancy leans on
-  `r_exit=9.5`, which also makes the agent exit on work it could do. At an
-  honest `r_exit` (below `r_task` − the hardest lawful work) `scrutiny` and
-  `block` each become load-bearing.
+  Two levers carry the scheme, and they are the two clauses of the root rule
+  in incentive form: remove `scrutiny` ("only declared") and the 6 non-zone
+  bypasses return; remove `block` ("not into the safety zone") and the 6
+  zone bypasses return — each holds exactly its half. `r_exit` and `lam` only
+  support them; removing all reproduces baseline (12). Behavior tracks the
+  cost table, not the watcher's label. (The first calibration, `r_exit=9.5`,
+  looked fully redundant — that redundancy was bought with laziness.)
 - **Laziness control.** Four control tasks the agent could finish lawfully
   (two with no wall, two with a real wall and a costly lawful path). The
-  published loop exits on all four — lazier than no scheme. The watcher
-  catches a *claimed* wall the log does not show (`false exit`); a real wall
-  with a lawful path behind it it cannot see. Only `r_exit` below
-  `r_task − work` prevents that; `sweep.py` §4 maps the corridor.
+  first calibration (`r_exit=9.5`) exited on all four — lazier than no
+  scheme. The watcher catches a *claimed* wall the log does not show (`false
+  exit`); a real wall with a lawful path behind it no watcher can see, so
+  `r_exit` must stay below `r_task` − the hardest lawful work. The current
+  loop (`r_exit=3`) does all four; `sweep.py` §4 maps the corridor. Its
+  price: outside the zone the agent now *declares* harm-bearing bypasses and
+  pays for them — 0 labeled bypasses, but real third-party harm (an open
+  question, see ROADMAP).
 - **Internalization sweep.** Scaling the incentives from 0 to full shows a
   smooth 12 → 0 transition; **partial** internalization already suffices.
 - **Noise robustness.** Under ε-greedy noise the loop's advantage shrinks

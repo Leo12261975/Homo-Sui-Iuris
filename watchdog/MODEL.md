@@ -51,6 +51,9 @@ wall with a lawful path behind it — the log backs the exit, the watcher
 cannot see it, and only the cost table prevents it: the agent exits exactly
 when `r_exit ≥ r_task − solve_cost`. So `r_exit` has a ceiling set by the
 hardest lawful work you want done, and cannot carry the anti-bypass load.
+The current `LOOP` uses `r_exit=3` with claimed walls checked. Its price:
+outside the zone a declared, harm-bearing bypass (paid via `lam`) now beats
+the exit — the root rule allows it, but third-party harm is real.
 
 **Who writes the log.** The agent produces an `Intent` — its declaration, what
 it does (`plan`), and optionally its own account (`self_report`). It does not
@@ -84,10 +87,13 @@ The two schemes are just two settings of this table:
   comes back. Declaring only costs `effort`, so honesty is pure cost — the
   agent bypasses silently everywhere. This is the agent from the Anthropic
   report (2026-10-09).
-- **Closed loop (loop):** `r_exit=9.5, λ=1, block=15, scrutiny=0.5`. The
-  externality returns, the zone is blocked, silence is scrutinized, and the
-  lawful exit is counted as (almost full) success. The same agent now finds
-  the lawful exit — or a declared safe bypass — to be the `argmax`.
+- **Closed loop (loop):** `r_exit=3, λ=1, block=15, scrutiny=0.5,
+  fabrication=4`. The externality returns, the zone is blocked, silence is
+  scrutinized, claimed walls are checked, and the lawful exit is rewarded —
+  but never above what the hardest lawful work leaves of the task reward.
+  The same agent now finds the lawful exit, the lawful work, or a declared
+  bypass outside the zone (paying for its harm) to be the `argmax`. The
+  first calibration (`r_exit=9.5`) is kept as `LOOP_V1`.
 
 Nothing about correctness is hard-coded. The behavior is a consequence of
 the numbers, which is the whole point: if even a self-interested maximizer
@@ -106,10 +112,14 @@ cross-check caught.
    table one at a time. Removing any single one keeps the scheme near zero;
    removing several brings bypasses back; removing all reproduces baseline
    (12). So behavior tracks the cost table, not the watcher's label — and
-   the scheme has **no single point of failure** — at the published
-   `r_exit=9.5`. That redundancy is partly bought with laziness (see §4 of
-   the sweep): at an `r_exit` low enough not to pay for lazy exits,
-   `scrutiny` and `block` each become load-bearing.
+   two levers are load-bearing, and they are the root rule in incentive
+   form: `scrutiny` ("only declared") holds the non-zone half of the cases,
+   `block` ("not into the zone") holds the zone half; `r_exit` and `lam`
+   support them. The first calibration (`r_exit=9.5`, kept as `LOOP_V1`)
+   looked fully redundant — that redundancy was bought with laziness.
+   Load-bearing means the weak point is known: `scrutiny` is only as good as
+   the witness that sees silence, so the investment goes into witness
+   coverage, not into the size of the penalty.
 2. **Internalization sweep** (`sweep.py`). Scale all loop incentives by a
    factor `s` from 0 (= baseline) to 1 (= full loop). Bypasses fall from 12
    to 0; **partial** internalization (`s≈0.3–0.7`) already suffices — the

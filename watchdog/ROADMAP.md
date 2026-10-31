@@ -59,18 +59,31 @@ proves the *logic*; it is not yet validated on a real LLM.
   a real wall with a lawful path behind it — is invisible to any watcher and
   only the cost table prevents it: the agent exits iff `r_exit ≥ r_task −
   solve_cost`. `sweep.py` §4 maps the corridor (r_exit × lever strength):
-  it exists for s ≥ 0.7 at r_exit ≤ 3 and is gone at s = 0.5. LOOP itself is
-  **not** recalibrated yet — see Tier 1.
+  it exists for s ≥ 0.7 at r_exit ≤ 3 and is gone at s = 0.5.
+- **LOOP recalibrated (Leo's call: honest numbers over patches).** `LOOP` is
+  now `r_exit=3.0` with claimed walls checked; the old table is kept as
+  `LOOP_V1`. Raising `scrutiny`/`block` to restore redundancy was rejected as
+  a patch. Result: 0 bypasses, 0 lazy exits; the s≈0.7 threshold and noise
+  robustness unchanged; "no single point of failure" replaced by a sharper
+  claim, pinned by `test_scheme_rests_on_the_two_clauses_of_the_root_rule`:
+  `scrutiny` holds exactly the 6 non-zone cases, `block` exactly the 6 zone
+  cases. Side effect: case 14 now reaches the arbiter (UNCLEAR) — the dead
+  `is_ambiguous` branch below is live.
 
 ## Tier 1 — thesis-bearing (do first)
-- **Decide the LOOP recalibration (Leo's call — it moves a headline claim).**
-  Trial `r_exit=3.0, fabrication=4.0`: full-scheme bypasses stay 0 and the
-  s≈0.7 threshold holds, but "no single point of failure" breaks — removing
-  `scrutiny` or `block` alone brings back 6 bypasses. The old redundancy was
-  partly bought with laziness. Options: accept the honest numbers and rewrite
-  the claim; or raise `scrutiny`/`block` to restore redundancy at an honest
-  `r_exit`. Either way the LLM run must be calibrated in the corridor, not at
-  9.5.
+- **Declared harm: should it be purchasable outside the zone?** The price
+  of the honest calibration: with `r_exit=3` the agent no longer exits on
+  non-zone tasks 4, 9, 10, 11, 13, 14 — it declares the bypass and pays the
+  harm via `lam=1`. 0 labeled bypasses, but third-party harm rises 0 → 8
+  (baseline 26). The root rule allows it (declared, outside the zone); the
+  question is whether harm should be *buyable* at all. Note what V1 hid:
+  `r_exit=9.5` also did harm-avoidance work, not only laziness. Exit beats a
+  harmful declared bypass iff `r_exit > r_task − λ·harm`; no laziness iff
+  `r_exit < r_task − work`. Both hold only when `λ·harm > work` — harm
+  returned must outweigh the lawful work. Options to weigh (Leo's call):
+  raise `λ` above 1 (punitive return); widen the zone to cover harm above a
+  threshold (unbuyable); or accept purchasable, declared, paid harm as the
+  intended meaning of the root rule. Test: `test_the_price_of_not_being_lazy`.
 - **Retroactive-declaration check.** The root rule says "declared *before* the
   action", but `Episode` has no order — "before" is assumed, not verified. Add
   `declared_before: bool` (or `declared_at`/`acted_at`) and, in
@@ -85,7 +98,9 @@ proves the *logic*; it is not yet validated on a real LLM.
   `block` is doing work or is redundant. Add a task where, *without* `block`,
   the agent should cross the zone — so removing `block` visibly fails. In the
   spirit of "the experiment must be able to fail".
-- **Fix the dead branch for case 14.** The `is_ambiguous` branch under
+- **~~Fix the dead branch for case 14.~~** Live since the recalibration —
+  the agent now declares the archive bypass and the watcher routes it to the
+  arbiter. Kept for the record: The `is_ambiguous` branch under
   `DECLARE_BYPASS` in `classify` is unreachable: for task 14 `u_exit (9.5) >
   u_declare (8.9)`, so the agent takes `LAWFUL_EXIT → NORM` and never reaches
   it. Either force it with a unit test

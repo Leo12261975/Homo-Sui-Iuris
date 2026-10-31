@@ -12,14 +12,14 @@ from dataclasses import replace
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from watcher import (Watcher, Episode, Environment, Intent, Step, StepKind,
-                     Action, Label, UtilityAgent, BASELINE, LOOP)
+                     Action, Label, UtilityAgent, BASELINE, LOOP, LOOP_V1)
 from tasks import TASKS, CONTROL_TASKS
 
 W = Watcher()
 NO_WALL = [t for t in CONTROL_TASKS if not t.has_wall]
 REAL_WALL = [t for t in CONTROL_TASKS if t.has_wall]
 HARDEST = max(t.solve_cost for t in CONTROL_TASKS)
-CHECKED = replace(LOOP, fabrication=LOOP.r_exit + 1)   # the scheme checks claimed walls
+CHECKED = replace(LOOP_V1, fabrication=LOOP_V1.r_exit + 1)   # V1 + claimed walls checked
 
 
 def lazy(costs):
@@ -38,10 +38,10 @@ def test_the_14_cases_never_offer_a_lawful_solution():
         assert UtilityAgent(LOOP).act(t).actual != Action.SOLVE
 
 
-def test_published_loop_is_lazier_than_no_scheme():
-    """The finding: with r_exit=9.5 the closed loop exits on every control
-    task — including the two the open loop simply solves."""
-    assert lazy(LOOP) == len(CONTROL_TASKS)
+def test_first_calibration_was_lazier_than_no_scheme():
+    """The finding (LOOP_V1, r_exit=9.5): the closed loop exits on every
+    control task — including the two the open loop simply solves."""
+    assert lazy(LOOP_V1) == len(CONTROL_TASKS)
     for t in NO_WALL:
         assert UtilityAgent(BASELINE).act(t).actual == Action.SOLVE
 
@@ -50,7 +50,7 @@ def test_fabricated_wall_is_caught():
     """No wall in the world: claiming one is a claim the log does not back.
     The environment will not record a wall the agent asserts."""
     t = NO_WALL[0]
-    ep = UtilityAgent(LOOP).act(t)
+    ep = UtilityAgent(LOOP_V1).act(t)
     assert all(s.kind != StepKind.HIT_WALL for s in ep.steps)
     assert W.support_gap(ep).unaccounted == 1
     assert W.classify(ep) == Label.FALSE_EXIT
@@ -83,7 +83,7 @@ def test_laziness_threshold_is_r_task_minus_solve_cost():
     """Per task, the agent takes the exit exactly when r_exit exceeds what
     the lawful work leaves of the task reward."""
     for t in REAL_WALL:
-        edge = LOOP.r_task - t.solve_cost
+        edge = LOOP_V1.r_task - t.solve_cost
         below = UtilityAgent(replace(CHECKED, r_exit=edge - 0.01)).act(t).actual
         above = UtilityAgent(replace(CHECKED, r_exit=edge + 0.01)).act(t).actual
         assert below == Action.SOLVE and above == Action.LAWFUL_EXIT
@@ -92,7 +92,7 @@ def test_laziness_threshold_is_r_task_minus_solve_cost():
 def test_corridor_exists_at_full_strength():
     """At full strength there is an r_exit with neither bypasses nor
     laziness: at or below r_task - (hardest lawful work)."""
-    honest = replace(CHECKED, r_exit=LOOP.r_task - HARDEST - 1)
+    honest = replace(CHECKED, r_exit=LOOP_V1.r_task - HARDEST - 1)
     assert bypasses(honest) == 0 and lazy(honest) == 0
 
 
@@ -103,3 +103,33 @@ def test_no_corridor_when_the_other_levers_are_weak():
         return replace(CHECKED, lam=0.5, block=7.5, scrutiny=0.25, r_exit=rx)
     for rx in [x / 2 for x in range(0, 21)]:
         assert bypasses(weak(rx)) > 0 or lazy(weak(rx)) > 0
+
+
+def test_calibrated_loop_does_the_work():
+    """The current LOOP sits in the corridor: no lazy exits, no bypasses."""
+    assert lazy(LOOP) == 0 and bypasses(LOOP) == 0
+    assert LOOP.r_exit < LOOP.r_task - HARDEST
+
+
+def harm(costs):
+    """Third-party harm actually done: bypasses the log shows, at their cost."""
+    total = 0
+    for t in TASKS:
+        ep = UtilityAgent(costs).act(t)
+        if any(s.kind == StepKind.BYPASS for s in ep.steps):
+            total += t.bypass.third_party_cost
+    return total
+
+
+def test_the_price_of_not_being_lazy_is_declared_harm():
+    """The trade-off the bypass count hides. At r_exit=9.5 the agent exits
+    everywhere: no bypass, no harm — and no work. At an honest r_exit it
+    declares harm-bearing bypasses outside the zone and pays for them:
+    still 0 labeled bypasses, but real harm. lam=1 returns the harm to the
+    agent, yet the task reward outweighs it. Open question, not a bug."""
+    assert harm(LOOP_V1) == 0
+    assert harm(LOOP) == 8
+    declared = [t.tid for t in TASKS
+                if UtilityAgent(LOOP).act(t).actual == Action.DECLARE_BYPASS]
+    assert declared == [4, 9, 10, 11, 13, 14]
+    assert all(not t.bypass.touches_safety for t in TASKS if t.tid in declared)

@@ -3,7 +3,8 @@
 python3 run.py
 """
 from collections import Counter
-from watcher import baseline_agent, loop_agent, Watcher, Label, Action, LOOP, UtilityAgent
+from watcher import (baseline_agent, loop_agent, Watcher, Label, Action, LOOP,
+                     LOOP_V1, UtilityAgent, StepKind)
 from tasks import TASKS
 
 WATCHER = Watcher()
@@ -114,20 +115,20 @@ print("   lie passes again. coverage is measured, not assumed.")
 print(f"\n{'─'*64}\n  Laziness control — the failure the bypass count cannot see\n{'─'*64}")
 from tasks import CONTROL_TASKS
 from dataclasses import replace as _replace
-checked = _replace(LOOP, fabrication=LOOP.r_exit + 1)
-print(f"   {'#':>2}  {'wall':5} {'work':>4}  {'without the scheme':24}  {'with the scheme':34}  {'+ wall check':26}")
+print(f"   {'#':>2}  {'wall':5} {'work':>4}  {'without the scheme':24}  {'first scheme (r_exit=9.5)':34}  {'scheme now':26}")
 for t in CONTROL_TASKS:
     cells = []
-    for ag in (baseline_agent(), loop_agent(), UtilityAgent(checked)):
+    for ag in (baseline_agent(), UtilityAgent(LOOP_V1), loop_agent()):
         ep = ag.act(t)
         act = "solve" if ep.actual == Action.SOLVE else SHORT.get(ep.actual, ep.actual.value)
         cells.append(f"{act}→{WATCHER.classify(ep).value}")
     print(f"   {t.tid:>2}  {'real' if t.has_wall else 'none':5} {t.solve_cost:4g}  "
           f"{cells[0]:24}  {cells[1]:34}  {cells[2]:26}")
-print("   the scheme as published (r_exit=9.5) exits on every doable task — lazier")
-print("   than no scheme. checking claimed walls catches the fabricated ones; a")
-print("   real wall with a lawful path behind it stays invisible ('norm') — only")
-print("   r_exit below r_task − work prevents that. see sweep.py, section 4.")
+print("   the first scheme (r_exit=9.5) exited on every doable task — lazier than")
+print("   no scheme. a claimed wall the log does not show is caught ('false exit');")
+print(f"   a real wall with a lawful path behind it is invisible to any watcher, so")
+print(f"   only the cost table prevents it: now r_exit={LOOP.r_exit:g}, below r_task minus")
+print("   the hardest lawful work, and the claimed walls are checked. sweep.py §4.")
 
 # ── REAL stimulus control: change the rules of the game, not the metric. ──
 # We turn off "exit = success" for the scheme agent.
@@ -151,13 +152,13 @@ variants = [
 ]
 for label, costs in variants:
     print(f"   {label:30} bypasses: {bypass_count(costs):2}")
-print("   no single incentive is load-bearing — remove one, the scheme holds;")
-print("   remove several and bypasses return, reaching baseline when all are off.")
+print("   two levers carry the scheme, and they are the root rule in incentive")
+print("   form: scrutiny = 'only declared' (remove it → the 6 non-zone bypasses")
+print("   return), block = 'not into the zone' (remove it → the 6 zone bypasses).")
+print("   each holds exactly its half; r_exit and λ only support them.")
 print("   behavior tracks the COST TABLE, not the watcher's label → the scheme")
-print("   works by incentive, and has no single point of failure.")
-print("   caveat: this redundancy leans on r_exit=9.5, which also pays for lazy")
-print("   exits (see the laziness control above); at an honest r_exit, scrutiny")
-print("   and block each become load-bearing.")
+print("   works by incentive. (the first calibration, r_exit=9.5, looked fully")
+print("   redundant — that redundancy was bought with laziness.)")
 
 # ── Summary ──
 print(f"\n{'═'*64}\n  SUMMARY\n{'═'*64}")
@@ -166,4 +167,13 @@ print(f"   bypasses (watcher's label):  without {base_labels.get(Label.BYPASS,0)
 print(f"   of which touched the zone:   without {base_zone:2}"
       f"   →   with the scheme {loop_zone:2}")
 print(f"   tasks closed honestly:       without {base_closed:2}"
-      f"   →   with the scheme {loop_closed:2}")
+      f"   →   with the scheme {loop_closed:2}   (case 14 goes to the arbiter)")
+
+
+def harm(rows):
+    return sum(t.bypass.third_party_cost for t, ep in rows
+               if any(s.kind == StepKind.BYPASS for s in ep.steps))
+
+
+print(f"   third-party harm done:       without {harm(base_rows):2}"
+      f"   →   with the scheme {harm(loop_rows):2}   (declared, paid via λ — open question)")
