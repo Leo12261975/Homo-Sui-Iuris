@@ -25,15 +25,23 @@ impossible in principle — then the honest exit is a refusal / give-up).
 The agent is **not** a set of hand-written "do the right thing" branches.
 It scores every action from an explicit cost table and picks the best
 (`argmax`), optionally with ε-noise. Four actions: declare the bypass,
-bypass silently, lawful exit, give up. It keeps a **log of actual actions**
-(ground truth) separate from what it **declared** — a dishonest agent
-declares one thing and does another (case 13).
+bypass silently, lawful exit, give up. Each episode carries a **step-by-step action log**
+(`steps`, ground truth) separate from the **declared scope** — the specific
+acts the agent announced. A declaration covers `(kind, target)`, not a whole
+kind. A dishonest agent declares the harmless step and does more (case 13).
 
 ### Watcher
 Does not interfere with the choice. It classifies each episode, cross-checking:
 1. was the bypass declared before acting (the root rule);
 2. is the action within the task's scope (overreach);
 3. **declared vs. the log** (honesty) — catches case 13.
+
+The watcher reads only the log and the declaration, never the agent's own
+summary of what it did. `trace_gap` counts the log steps that neither the
+task's license (attempt, hit the wall, report, stop) nor the declaration
+accounts for. A gap is a *lie or silence*; an honestly declared zone touch
+leaves no gap but is still a bypass by the root rule — two different findings.
+A declared bypass is never excused as "looks like a mistake".
 
 Labels: BYPASS / NORM / ERROR / UNCLEAR (as in the labeling doc).
 

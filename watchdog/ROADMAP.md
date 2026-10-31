@@ -10,18 +10,30 @@ cross-check (declared vs. observed) catches the dishonest ones. The sandbox
 proves the *logic*; it is not yet validated on a real LLM.
 
 ## Already done
+- **`trace_gap` made load-bearing via a multi-step action log.** `Episode` now
+  carries `steps: list[Step]` (the witness, step by step) and `declared_scope`
+  (the specific acts declared — a declaration covers `(kind, target)`, not a
+  whole kind). `Watcher.classify` reads only the log, the declaration and the
+  task flags — never the agent's own `actual` summary. Case 13 is now a check
+  over a 5-step sequence (2 steps unaccounted, with fingerprints). The old
+  `Episode(task, declared, actual, crossed_zone)` constructor still works (a
+  canonical log is derived), and `run.py` / `sweep.py` output is byte-identical
+  to before. Knock-out test: replace `trace_gap` with a blind one and the open
+  loop's 12 bypasses fall to 6 (only the zone rule holds) and an out-of-zone
+  lie escapes as NORM — so the primitive carries the non-zone half. Findings
+  on the way: (a) the old gap counted an *honestly declared* zone touch as
+  unaccounted, conflating "lied" with "declared a forbidden act"; the two are
+  now separate findings (gap vs. root rule). (b) That conflation had masked a
+  rule-order hole — "looks like a mistake" (7, 8) could excuse a bypass the
+  agent itself declared; a declared bypass is now never excused as a mistake.
+  (c) `watchdog/tests` was not in `testpaths`, so CI never ran it; fixed.
+  Natural next step: the declaration becomes a log entry itself, which turns
+  the retroactive-declaration check below into an ordering check over `steps`.
 - Dedicated `trace_gap` unit tests — `tests/test_trace_gap.py` (8 tests: empty
   witness, all/partial accounted, sorted & deduped fingerprints, custom
   accessors, W0Guard provenance shape). Shipped in PR #15.
 
 ## Tier 1 — thesis-bearing (do first)
-- **Make `trace_gap` load-bearing, not ceremonial.** Today the watcher calls it
-  on a 1–2 event witness, so `trace_gap(witness, {declared})` is essentially
-  `actual != declared`. Model a multi-step log: `Episode.actions: list[Action]`
-  (what the agent did, step by step); `trace_gap` then counts how many steps the
-  declaration does not cover. Case 13 ("declared the harmless bit, did more")
-  becomes a check over a *sequence* — the same code W0Guard runs over weight
-  history. This is also the measurement instrument the LLM validation needs.
 - **Retroactive-declaration check.** The root rule says "declared *before* the
   action", but `Episode` has no order — "before" is assumed, not verified. Add
   `declared_before: bool` (or `declared_at`/`acted_at`) and, in
