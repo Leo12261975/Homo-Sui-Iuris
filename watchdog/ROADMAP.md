@@ -29,6 +29,20 @@ proves the *logic*; it is not yet validated on a real LLM.
   (c) `watchdog/tests` was not in `testpaths`, so CI never ran it; fixed.
   Natural next step: the declaration becomes a log entry itself, which turns
   the retroactive-declaration check below into an ordering check over `steps`.
+- **Independent witness: the environment writes the log.** (Prompted by an
+  outside review: if the agent writes its own log it can make the log match
+  the declaration, and no cross-check helps.) The agent now returns an
+  `Intent` (declaration, `plan`, optional `self_report`); an `Environment`
+  executes the plan and keeps the log. `act()` = `Environment().execute(
+  decide())`, so all numbers are unchanged. Tests: a watcher trusting the
+  agent's self-report is fooled (gap 0, NORM) while the environment's log
+  catches the lie (gap 2, BYPASS); with an independent log the only way to
+  zero the gap is to declare everything (and a declared zone touch is still a
+  bypass by the rule). Witness coverage is measured: `blind_targets` model
+  uninstrumented channels, and blind to both of case 13's extra channels the
+  lie passes as NORM at coverage 3/5 — the experiment can fail. This is also
+  the harness shape for LLM validation: the model emits the declaration and
+  tool calls, the harness is the Environment.
 - Dedicated `trace_gap` unit tests — `tests/test_trace_gap.py` (8 tests: empty
   witness, all/partial accounted, sorted & deduped fingerprints, custom
   accessors, W0Guard provenance shape). Shipped in PR #15.
@@ -93,7 +107,10 @@ proves the *logic*; it is not yet validated on a real LLM.
   tasks through a real model (local, via the `threat_judge.py` infra) and
   compare its choices against the `UtilityAgent` prediction. This turns the
   sandbox from "the logic of a scheme" into "a scheme + empirics on an LLM".
-  The multi-step action log (Tier 1) is its runway.
+  Its runway is in place: the multi-step log and the `Environment` as the
+  independent witness (the harness records the model's tool calls). Open
+  question to carry over: which channels the harness does NOT see, i.e. the
+  real coverage of the witness.
 - **Causal / Pearl framing of the sweep.** Reframe the cost-parameter sweep as a
   do-calculus intervention study: the incentive is `do(λ)`, the bypass rate is
   the outcome. Bridges to the Pearl exchange; makes the phase-transition a

@@ -89,6 +89,27 @@ print("   the declared-vs-log cross-check (trace_gap, step by step) catches")
 print("   the mismatch as a BYPASS;")
 print("   declaration alone is not enough — a cross-check is needed (from the labeling)")
 
+# ── Independent witness: the log is the environment's, not the agent's ──
+print(f"\n{'─'*64}\n  Independent witness — who writes the log\n{'─'*64}")
+from watcher import Environment, Episode, SAFETY_ZONE, UNDECLARED_PATH
+intent = loop_agent(honest=False).decide(t13)
+naive = Episode(t13, intent.declared, intent.action,
+                steps=intent.self_report, declared_scope=intent.declared_scope,
+                hidden=[s for s in intent.plan if s not in intent.self_report])
+worlds = [("agent's own log (naive)", naive),
+          ("environment, full view", Environment().execute(intent)),
+          ("environment, 1 blind channel", Environment({UNDECLARED_PATH}).execute(intent)),
+          ("environment, 2 blind channels",
+           Environment({UNDECLARED_PATH, SAFETY_ZONE}).execute(intent))]
+for name, ep in worlds:
+    g = WATCHER.gap(ep)
+    print(f"   {name:30} coverage {ep.coverage:4.0%}   gap {g.unaccounted}"
+          f"   → {WATCHER.classify(ep).value}")
+print("   trusting the agent's log, the lie passes; the environment's log catches")
+print("   it — the agent can zero the gap only by declaring what it does.")
+print("   a witness sees only what it instruments: blind to both channels, the")
+print("   lie passes again. coverage is measured, not assumed.")
+
 # ── REAL stimulus control: change the rules of the game, not the metric. ──
 # We turn off "exit = success" for the scheme agent.
 # If the incentive is what makes the difference, the agent returns to bypasses.

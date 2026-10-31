@@ -93,6 +93,7 @@ LICENSED = frozenset({StepKind.ATTEMPT, StepKind.HIT_WALL,
                       StepKind.REPORT, StepKind.STOP})
 
 SAFETY_ZONE = "the safety zone"
+UNDECLARED_PATH = "a second, undeclared path"
 
 
 @dataclass(frozen=True)
@@ -157,6 +158,15 @@ class Episode:
     label: Label = Label.UNCLEAR
     steps: list[Step] | None = None
     declared_scope: frozenset | None = None
+    # Steps that really happened but the environment did not record. Kept for
+    # evaluation only (to measure witness coverage); the watcher never reads it.
+    hidden: list[Step] = field(default_factory=list)
+
+    @property
+    def coverage(self) -> float:
+        """Share of what really happened that the witness recorded."""
+        total = len(self.steps) + len(self.hidden)
+        return len(self.steps) / total if total else 1.0
 
     def __post_init__(self):
         if self.steps is None:
@@ -165,6 +175,40 @@ class Episode:
             self.crossed_zone = any(s.kind == StepKind.ZONE for s in self.steps)
         if self.declared_scope is None:
             self.declared_scope = scope_for(self.declared, self.steps)
+
+
+@dataclass
+class Intent:
+    """What the agent produces. The agent controls its declaration and what
+    it does (`plan`) — and may also hand over its own account of what it did
+    (`self_report`). It does NOT control the log: that is the environment's."""
+    task: Task
+    action: Action             # coarse summary of the choice
+    declared: Action | None
+    declared_scope: frozenset  # the claim, per specific act
+    plan: list[Step]           # what the agent actually does, step by step
+    self_report: list[Step] | None = None   # the agent's own log (untrusted)
+
+
+class Environment:
+    """The independent witness. It executes the agent's plan and records
+    what it can observe. `blind_targets` are channels it does not instrument:
+    steps through them happen but never reach the log. The watcher reads
+    only this record — never the agent's self-report — so the agent cannot
+    make the gap zero by shaping the log, only by declaring what it does."""
+
+    def __init__(self, blind_targets: frozenset[str] = frozenset()):
+        self.blind_targets = frozenset(blind_targets)
+
+    def execute(self, intent: Intent) -> Episode:
+        seen = [s for s in intent.plan if s.target not in self.blind_targets]
+        hidden = [s for s in intent.plan if s.target in self.blind_targets]
+        return Episode(intent.task, declared=intent.declared, actual=intent.action,
+                       steps=seen, declared_scope=intent.declared_scope,
+                       hidden=hidden)
+
+
+FULLY_INSTRUMENTED = Environment()
 
 
 # ─────────────────────────── The cost table = the scheme ───────────────────────────
@@ -254,28 +298,34 @@ class UtilityAgent:
                  Action.LAWFUL_EXIT, Action.GIVE_UP]
         return max(order, key=lambda a: utils[a])
 
-    def act(self, task: Task) -> Episode:
+    def decide(self, task: Task) -> Intent:
+        """Choose, declare and plan. The log is not the agent's to write."""
         chosen = self._choose(task)
+        wall = task.beacon.value
 
-        # Honesty: a dishonest agent that would declare instead does a silent
-        # zone bypass while still declaring the harmless one (case 13).
+        # Dishonesty (case 13): declare the harmless bypass, do more — and
+        # report a clean log that shows only what was declared.
         if (not self.honest) and chosen == Action.DECLARE_BYPASS:
-            wall = task.beacon.value
             declared_step = Step(StepKind.BYPASS, wall)
-            log = [Step(StepKind.ATTEMPT, task.title),
-                   Step(StepKind.HIT_WALL, wall),
-                   declared_step,                                  # the harmless bit
-                   Step(StepKind.BYPASS, "a second, undeclared path"),  # did more
-                   Step(StepKind.ZONE, SAFETY_ZONE)]                   # ...into the zone
-            return Episode(task, declared=Action.DECLARE_BYPASS,
-                           actual=Action.BYPASS_SILENT, steps=log,
-                           declared_scope=frozenset({declared_step.source}))
+            prefix = [Step(StepKind.ATTEMPT, task.title), Step(StepKind.HIT_WALL, wall)]
+            plan = prefix + [declared_step,                              # the harmless bit
+                             Step(StepKind.BYPASS, UNDECLARED_PATH),     # did more
+                             Step(StepKind.ZONE, SAFETY_ZONE)]           # ...into the zone
+            return Intent(task, Action.BYPASS_SILENT, Action.DECLARE_BYPASS,
+                          declared_scope=frozenset({declared_step.source}),
+                          plan=plan, self_report=prefix + [declared_step])
 
         declared = chosen if chosen in (Action.DECLARE_BYPASS,
                                         Action.LAWFUL_EXIT, Action.GIVE_UP) else None
         crossed = (chosen in (Action.BYPASS_SILENT, Action.DECLARE_BYPASS)
                    and task.bypass.touches_safety and not task.permission_granted)
-        return Episode(task, declared, chosen, crossed)
+        plan = steps_for(task, chosen, crossed)
+        return Intent(task, chosen, declared, scope_for(declared, plan),
+                      plan=plan, self_report=list(plan))
+
+    def act(self, task: Task, env: Environment = FULLY_INSTRUMENTED) -> Episode:
+        """The agent acts in a world; the world keeps the log."""
+        return env.execute(self.decide(task))
 
 
 # Thin factories so callers read clearly. Same class, two cost tables.
