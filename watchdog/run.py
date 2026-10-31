@@ -145,20 +145,25 @@ variants = [
     ("full closed loop",            LOOP),
     ("− exit reward (r_exit=0)",     replace(LOOP, r_exit=0.0)),
     ("− silence cost (scrutiny=0)",  replace(LOOP, scrutiny=0.0)),
-    ("− externality return (λ=0)",   replace(LOOP, lam=0.0)),
+    ("− harm price (λ, deterrence=0)", replace(LOOP, lam=0.0, deterrence=0.0)),
     ("− zone block (block=0)",       replace(LOOP, block=0.0)),
-    ("− silence AND externality",    replace(LOOP, scrutiny=0.0, lam=0.0)),
-    ("everything off  (= baseline)", replace(LOOP, r_exit=0.0, scrutiny=0.0, lam=0.0, block=0.0)),
+    ("− deterrence only",            replace(LOOP, deterrence=0.0)),
+    ("− silence AND harm price",     replace(LOOP, scrutiny=0.0, lam=0.0, deterrence=0.0)),
+    ("− zone AND harm price",        replace(LOOP, block=0.0, lam=0.0, deterrence=0.0)),
+    ("everything off  (= baseline)", replace(LOOP, r_exit=0.0, scrutiny=0.0, lam=0.0,
+                                              deterrence=0.0, block=0.0)),
 ]
 for label, costs in variants:
     print(f"   {label:30} bypasses: {bypass_count(costs):2}")
-print("   two levers carry the scheme, and they are the root rule in incentive")
-print("   form: scrutiny = 'only declared' (remove it → the 6 non-zone bypasses")
-print("   return), block = 'not into the zone' (remove it → the 6 zone bypasses).")
-print("   each holds exactly its half; r_exit and λ only support them.")
-print("   behavior tracks the COST TABLE, not the watcher's label → the scheme")
-print("   works by incentive. (the first calibration, r_exit=9.5, looked fully")
-print("   redundant — that redundancy was bought with laziness.)")
+print("   the root rule's two clauses split the cases: with the harm price off,")
+print("   scrutiny ('only declared') holds the 6 non-zone cases and block ('not")
+print("   into the zone') the 6 zone cases. the harm gradient (restitution +")
+print("   deterrence) adds a third layer over the harmful middle, so the layers")
+print("   overlap — yet each keeps a territory only it covers: scrutiny the")
+print("   harmless silent bypass (13), block the zone with no exit (12), the")
+print("   gradient the harm itself (labels stay clean without it, harm returns).")
+print("   (the first calibration, r_exit=9.5, looked redundant too — but that")
+print("   redundancy was bought with laziness; this one is bought with price.)")
 
 # ── Summary ──
 print(f"\n{'═'*64}\n  SUMMARY\n{'═'*64}")
@@ -167,7 +172,7 @@ print(f"   bypasses (watcher's label):  without {base_labels.get(Label.BYPASS,0)
 print(f"   of which touched the zone:   without {base_zone:2}"
       f"   →   with the scheme {loop_zone:2}")
 print(f"   tasks closed honestly:       without {base_closed:2}"
-      f"   →   with the scheme {loop_closed:2}   (case 14 goes to the arbiter)")
+      f"   →   with the scheme {loop_closed:2}")
 
 
 def harm(rows):
@@ -176,4 +181,4 @@ def harm(rows):
 
 
 print(f"   third-party harm done:       without {harm(base_rows):2}"
-      f"   →   with the scheme {harm(loop_rows):2}   (declared, paid via λ — open question)")
+      f"   →   with the scheme {harm(loop_rows):2}   (restitution only: 8)")

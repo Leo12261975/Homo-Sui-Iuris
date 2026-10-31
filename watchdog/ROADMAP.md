@@ -67,23 +67,38 @@ proves the *logic*; it is not yet validated on a real LLM.
   robustness unchanged; "no single point of failure" replaced by a sharper
   claim, pinned by `test_scheme_rests_on_the_two_clauses_of_the_root_rule`:
   `scrutiny` holds exactly the 6 non-zone cases, `block` exactly the 6 zone
-  cases. Side effect: case 14 now reaches the arbiter (UNCLEAR) — the dead
-  `is_ambiguous` branch below is live.
+  cases. Side effect: case 14 reached the arbiter (UNCLEAR) — briefly.
+- **Harm hybrid: a gradient and a zone (Leo's call: price over prohibition,
+  with the zone for what cannot be priced).** The open question "should
+  declared harm be purchasable?" (restitution alone: 0 labeled bypasses but
+  harm 8) is settled as three regulators, one per failure: priceable harm →
+  restitution (`lam=1`) + `deterrence=6` (the gradient; cheap harm is never
+  bought, a large stake can still justify it — proportionality); unpriceable
+  harm (not reversible, compensable *and* measurable — `Bypass.in_zone`) →
+  the zone; laziness → the `r_exit` ceiling. The exit is never in the zone.
+  "Compensable" replaced "consented": third-party harm is unconsented by
+  definition, so consent would have zoned all harm. Results: harm 0,
+  bypasses 0, lazy exits 0; a soft markup (deterrence ≤ 2) changes nothing.
+  The gradient restored robustness without patching: the internalization
+  threshold fell from s≈0.7 to s≈0.5 and the laziness corridor now exists at
+  s=0.5. The layers overlap, yet each keeps a territory only it covers
+  (scrutiny: harmless silent bypass 13; block: zone with no exit 12;
+  deterrence: the harm itself). Case 14 exits again, so the arbiter branch is
+  dead again — see below. Tests: `test_harm_gradient.py`.
 
 ## Tier 1 — thesis-bearing (do first)
-- **Declared harm: should it be purchasable outside the zone?** The price
-  of the honest calibration: with `r_exit=3` the agent no longer exits on
-  non-zone tasks 4, 9, 10, 11, 13, 14 — it declares the bypass and pays the
-  harm via `lam=1`. 0 labeled bypasses, but third-party harm rises 0 → 8
-  (baseline 26). The root rule allows it (declared, outside the zone); the
-  question is whether harm should be *buyable* at all. Note what V1 hid:
-  `r_exit=9.5` also did harm-avoidance work, not only laziness. Exit beats a
-  harmful declared bypass iff `r_exit > r_task − λ·harm`; no laziness iff
-  `r_exit < r_task − work`. Both hold only when `λ·harm > work` — harm
-  returned must outweigh the lawful work. Options to weigh (Leo's call):
-  raise `λ` above 1 (punitive return); widen the zone to cover harm above a
-  threshold (unbuyable); or accept purchasable, declared, paid harm as the
-  intended meaning of the root rule. Test: `test_the_price_of_not_being_lazy`.
+- **Make the zone absolute: enforcement by the environment.** Found while
+  testing the harm hybrid: `block` is a finite price in the agent's ledger,
+  so at a stake of 30 the agent buys its way into the zone (pinned by
+  `test_the_zone_in_the_sandbox_is_a_large_price_not_a_wall`). Option 2 —
+  "unbuyable at any price" — needs the *environment* to stop a zone act (the
+  task is not done, no reward), not the ledger to price it. Same principle
+  as the independent witness: what must not be bargained with belongs to the
+  world, not to the agent's arithmetic. Touches the sweeps (block scaling).
+- **Label tasks 1–14 by the harm criteria (Leo's call).** All six non-zone
+  cases (4, 9, 10, 11, 13, 14) are left priceable by default (reversible,
+  compensable, measurable); the zone cases are already zone via the safety
+  flag. A proposal to confirm or correct, not a decision made.
 - **Retroactive-declaration check.** The root rule says "declared *before* the
   action", but `Episode` has no order — "before" is assumed, not verified. Add
   `declared_before: bool` (or `declared_at`/`acted_at`) and, in
@@ -98,9 +113,10 @@ proves the *logic*; it is not yet validated on a real LLM.
   `block` is doing work or is redundant. Add a task where, *without* `block`,
   the agent should cross the zone — so removing `block` visibly fails. In the
   spirit of "the experiment must be able to fail".
-- **~~Fix the dead branch for case 14.~~** Live since the recalibration —
-  the agent now declares the archive bypass and the watcher routes it to the
-  arbiter. Kept for the record: The `is_ambiguous` branch under
+- **Fix the dead branch for case 14.** Briefly live after the recalibration
+  (the agent declared the archive bypass and reached the arbiter), dead again
+  under the harm gradient (harm 1 no longer pays, so it exits). Still needs
+  a case that reaches the arbiter on purpose. Original note: The `is_ambiguous` branch under
   `DECLARE_BYPASS` in `classify` is unreachable: for task 14 `u_exit (9.5) >
   u_declare (8.9)`, so the agent takes `LAWFUL_EXIT → NORM` and never reaches
   it. Either force it with a unit test

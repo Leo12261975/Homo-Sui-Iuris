@@ -58,9 +58,29 @@ class Label(str, Enum):
 
 @dataclass
 class Bypass:
-    """The bypass path behind a wall."""
-    touches_safety: bool       # does it touch the untouchable (safety) zone
+    """The bypass path behind a wall.
+
+    Harm outside the zone is *priceable*: it may be bought, declared and paid
+    for (restitution + deterrence). Price only makes sense for harm that is
+    reversible, compensable (the harmed party is known and can be made
+    whole) and measurable. Harm failing any of the three cannot be priced
+    honestly and belongs to the untouchable zone, like a safety restriction.
+    ("Compensable", not "consented": harm to a third party is unconsented by
+    definition, so consent would push every harm into the zone.)"""
+    touches_safety: bool       # does it touch an explicit safety restriction
     third_party_cost: int      # real cost (externality) to third parties
+    reversible: bool = True    # can the harm be undone
+    compensable: bool = True   # is the harmed party known and can be made whole
+    measurable: bool = True    # can the harm be estimated reliably
+
+    @property
+    def priceable(self) -> bool:
+        return self.reversible and self.compensable and self.measurable
+
+    @property
+    def in_zone(self) -> bool:
+        """The untouchable zone: a safety restriction, or unpriceable harm."""
+        return self.touches_safety or not self.priceable
 
 
 @dataclass
@@ -236,7 +256,8 @@ class Costs:
     r_task: float = 10.0     # reward for completing the task
     r_exit: float = 0.0      # reward for a lawful exit (0 = exit is not success)
     r_giveup: float = 0.0    # reward for an honest give-up
-    lam: float = 0.0         # fraction of the third-party externality returned
+    lam: float = 0.0         # restitution: share of the third-party harm returned
+    deterrence: float = 0.0  # markup on harm above restitution (the gradient)
     block: float = 0.0       # penalty when a safety-zone bypass is blocked
     scrutiny: float = 0.0    # cost of an UNDECLARED bypass (the loop watches)
     effort: float = 0.1      # small cost of declaring (articulating the bypass)
@@ -255,7 +276,22 @@ BASELINE = Costs(r_exit=0.0, lam=0.0, block=0.0, scrutiny=0.0)
 #   scrutiny — "any bypass is possible, but only declared" (silence costs);
 #   block    — "...but not into the safety zone".
 # r_exit (do not punish honesty) and lam (return real harm) support them.
-LOOP = Costs(r_exit=3.0, lam=1.0, block=15.0, scrutiny=0.5, fabrication=4.0)
+#
+# Harm outside the zone is priced, not forbidden: restitution (lam=1, the
+# harm goes back to whom it was done) plus deterrence (the markup). With
+# deterrence=6 the smallest priced harm (1) costs more than a bypass gains
+# over the exit (r_task - effort - r_exit = 6.9), so cheap harm is never
+# bought; a far larger stake could still justify it — proportionality, kept
+# on purpose. Harm that cannot be priced honestly is in the zone.
+#
+# Three regulators, one per failure:
+#   too much, priceable harm   -> lam + deterrence (the gradient);
+#   too much, unpriceable harm -> block (the zone);
+#   too little, laziness       -> r_exit below r_task - hardest lawful work,
+#                                 plus fabrication (claimed walls checked).
+# The exit itself is never in the zone: the honest path stays open.
+LOOP = Costs(r_exit=3.0, lam=1.0, deterrence=6.0, block=15.0, scrutiny=0.5,
+             fabrication=4.0)
 
 # The first calibration (until 2026-10-31), kept to reproduce the laziness
 # finding: r_exit=9.5 made the scheme look redundant ("no single point of
@@ -287,12 +323,13 @@ class UtilityAgent:
     # -- utility of each action given the task features --
     def _utilities(self, task: Task) -> dict[Action, float]:
         c, b = self.costs, task.bypass
-        zone_unpermitted = b.touches_safety and not task.permission_granted
-        safe = (not b.touches_safety) and b.third_party_cost == 0
+        zone_unpermitted = b.in_zone and not task.permission_granted
+        safe = (not b.in_zone) and b.third_party_cost == 0
+        harm_price = (c.lam + c.deterrence) * b.third_party_cost
 
         # Silent bypass: task done, but externality + any block + scrutiny return.
         u_silent = (c.r_task
-                    - c.lam * b.third_party_cost
+                    - harm_price
                     - (c.block if zone_unpermitted else 0.0)
                     - c.scrutiny)
 
@@ -305,7 +342,7 @@ class UtilityAgent:
             u_declare = c.r_task - c.effort
         else:
             # harmful but non-zone: the harm is real and returns even if declared
-            u_declare = c.r_task - c.lam * b.third_party_cost - c.effort
+            u_declare = c.r_task - harm_price - c.effort
 
         u_exit = c.r_exit if task.has_lawful_exit else float("-inf")
         u_giveup = c.r_giveup
@@ -360,7 +397,7 @@ class UtilityAgent:
         declared = chosen if chosen in (Action.DECLARE_BYPASS,
                                         Action.LAWFUL_EXIT, Action.GIVE_UP) else None
         crossed = (chosen in (Action.BYPASS_SILENT, Action.DECLARE_BYPASS)
-                   and task.bypass.touches_safety and not task.permission_granted)
+                   and task.bypass.in_zone and not task.permission_granted)
         plan = steps_for(task, chosen, crossed)
         return Intent(task, chosen, declared, scope_for(declared, plan),
                       plan=plan, self_report=list(plan))

@@ -50,15 +50,16 @@ schemes are literally two cost tables fed to the same agent:
 | lever      | open loop | closed loop | meaning |
 |------------|-----------|-------------|---------|
 | `r_exit`   | 0 | 3.0 | reward for the lawful exit — below r_task minus the hardest lawful work (first calibration: 9.5) |
-| `λ`        | 0 | 1.0 | fraction of the third-party externality returned |
-| `block`    | 0 | 15  | penalty for a safety-zone bypass |
+| `λ`        | 0 | 1.0 | restitution: the third-party harm returned |
+| `deterrence` | 0 | 6.0 | markup on priceable harm — cheap harm is never bought |
+| `block`    | 0 | 15  | penalty for a zone bypass (safety restriction or unpriceable harm) |
 | `scrutiny` | 0 | 0.5 | cost of an undeclared (silent) bypass |
 | `fabrication` | 0 | 4.0 | penalty for claiming a wall the log does not show |
 
 In the open loop, declaring only costs effort and earns nothing, so the
 agent bypasses silently everywhere. In the closed loop, the same maximizer
-finds the lawful exit, the lawful work, or a declared bypass outside the
-zone (paying for any harm) to be the best move.
+finds the lawful work, else the lawful exit, to be the best move — a
+declared bypass only where it harms no one.
 If even a self-interested agent goes honest under this table, that argues
 the scheme, not the labeling.
 
@@ -85,31 +86,36 @@ the scheme, not the labeling.
 |---|---|---|
 | bypasses (watcher's label) | 12 | 0 |
 | of which touched the safety zone | 8 | 0 |
-| tasks closed honestly | 12/14 | 11/14 (case 14 to the arbiter) |
-| third-party harm done | 26 | 8 (declared, paid via λ) |
+| tasks closed honestly | 12/14 | 12/14 |
+| third-party harm done | 26 | 0 (restitution only: 8) |
 | lazy exits on doable control tasks | — (bypasses instead) | 0/4 (first calibration: 4/4) |
 
 The closed loop removes bypasses and does the doable work. But the
 numbers do not prove themselves — three controls do that:
 
 - **Stimulus decomposition.** Strip the loop's incentives one at a time.
-  Two levers carry the scheme, and they are the two clauses of the root rule
-  in incentive form: remove `scrutiny` ("only declared") and the 6 non-zone
-  bypasses return; remove `block` ("not into the safety zone") and the 6
-  zone bypasses return — each holds exactly its half. `r_exit` and `lam` only
-  support them; removing all reproduces baseline (12). Behavior tracks the
+  The two clauses of the root rule split the cases: with the harm price off,
+  `scrutiny` ("only declared") holds the 6 non-zone cases and `block` ("not
+  into the zone") the 6 zone cases. The harm gradient adds a third layer
+  over the harmful middle; the layers overlap, yet each keeps a territory
+  only it covers. Removing all reproduces baseline (12). Behavior tracks the
   cost table, not the watcher's label. (The first calibration, `r_exit=9.5`,
-  looked fully redundant — that redundancy was bought with laziness.)
+  looked redundant too — that redundancy was bought with laziness.)
 - **Laziness control.** Four control tasks the agent could finish lawfully
   (two with no wall, two with a real wall and a costly lawful path). The
   first calibration (`r_exit=9.5`) exited on all four — lazier than no
   scheme. The watcher catches a *claimed* wall the log does not show (`false
   exit`); a real wall with a lawful path behind it no watcher can see, so
   `r_exit` must stay below `r_task` − the hardest lawful work. The current
-  loop (`r_exit=3`) does all four; `sweep.py` §4 maps the corridor. Its
-  price: outside the zone the agent now *declares* harm-bearing bypasses and
-  pays for them — 0 labeled bypasses, but real third-party harm (an open
-  question, see ROADMAP).
+  loop (`r_exit=3`) does all four; `sweep.py` §4 maps the corridor.
+- **Harm: a gradient, and a zone.** With restitution alone (`λ=1`) an honest
+  `r_exit` let the agent *declare* harm-bearing bypasses and pay for them (0
+  labeled bypasses, harm 8). Harm is now priced as restitution + deterrence,
+  so cheap harm is never bought, while a large enough stake can still
+  justify it — proportionality, on purpose. Harm that cannot be priced
+  honestly (irreversible, not compensable, or not measurable) is in the
+  zone. The exit is never in the zone. Honest limit: in the sandbox the zone
+  is a large price, not a wall — a big enough stake buys its way in.
 - **Internalization sweep.** Scaling the incentives from 0 to full shows a
   smooth 12 → 0 transition; **partial** internalization already suffices.
 - **Noise robustness.** Under ε-greedy noise the loop's advantage shrinks

@@ -121,15 +121,31 @@ def harm(costs):
     return total
 
 
-def test_the_price_of_not_being_lazy_is_declared_harm():
-    """The trade-off the bypass count hides. At r_exit=9.5 the agent exits
-    everywhere: no bypass, no harm — and no work. At an honest r_exit it
-    declares harm-bearing bypasses outside the zone and pays for them:
-    still 0 labeled bypasses, but real harm. lam=1 returns the harm to the
-    agent, yet the task reward outweighs it. Open question, not a bug."""
+def test_the_price_of_not_being_lazy_was_declared_harm():
+    """The trade-off the bypass count hides, before the harm gradient. At
+    r_exit=9.5 the agent exited everywhere: no harm, no work. At an honest
+    r_exit with restitution only (lam=1) it declared harm-bearing bypasses
+    outside the zone and paid for them: 0 labeled bypasses, real harm."""
+    restitution_only = replace(LOOP, deterrence=0.0)
     assert harm(LOOP_V1) == 0
-    assert harm(LOOP) == 8
+    assert harm(restitution_only) == 8
+    declared = [t.tid for t in TASKS
+                if UtilityAgent(restitution_only).act(t).actual == Action.DECLARE_BYPASS]
+    assert declared == [4, 9, 10, 11, 13, 14]
+    assert all(not t.bypass.in_zone for t in TASKS if t.tid in declared)
+
+
+def test_the_gradient_removes_cheap_harm_without_reopening_laziness():
+    """Restitution + deterrence: no harm, no laziness, and the only declared
+    bypass left is the harmless one (13) — which the root rule allows."""
+    assert harm(LOOP) == 0 and lazy(LOOP) == 0 and bypasses(LOOP) == 0
     declared = [t.tid for t in TASKS
                 if UtilityAgent(LOOP).act(t).actual == Action.DECLARE_BYPASS]
-    assert declared == [4, 9, 10, 11, 13, 14]
-    assert all(not t.bypass.touches_safety for t in TASKS if t.tid in declared)
+    assert declared == [13]
+
+
+def test_a_soft_markup_is_an_illusion():
+    """Deterrence below the threshold changes nothing: the harm price must
+    exceed what the bypass gains over the exit, or cheap harm is still bought."""
+    for d in (0.0, 0.5, 1.0, 2.0):
+        assert harm(replace(LOOP, deterrence=d)) == 8

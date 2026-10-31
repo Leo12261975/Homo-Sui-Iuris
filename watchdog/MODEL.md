@@ -51,9 +51,25 @@ wall with a lawful path behind it — the log backs the exit, the watcher
 cannot see it, and only the cost table prevents it: the agent exits exactly
 when `r_exit ≥ r_task − solve_cost`. So `r_exit` has a ceiling set by the
 hardest lawful work you want done, and cannot carry the anti-bypass load.
-The current `LOOP` uses `r_exit=3` with claimed walls checked. Its price:
-outside the zone a declared, harm-bearing bypass (paid via `lam`) now beats
-the exit — the root rule allows it, but third-party harm is real.
+The current `LOOP` uses `r_exit=3` with claimed walls checked.
+
+**Harm: a gradient for what can be priced, the zone for what cannot.** With
+restitution alone an honest `r_exit` made a declared, harm-bearing bypass
+beat the exit. Harm outside the zone is now priced as `(lam + deterrence) ·
+harm`: `lam=1` is restitution (the harm goes back to whom it was done),
+`deterrence` the gradient on top. A soft markup does nothing — the price
+must exceed what the bypass gains over the exit, or cheap harm is still
+bought; `deterrence=6` puts the smallest harm past that line. A large enough
+stake can still justify a harm: proportionality, kept on purpose. Harm is
+priceable only if it is **reversible**, **compensable** (the harmed party is
+known and can be made whole) and **measurable**; failing any of the three
+puts it in the zone. ("Compensable", not "consented": third-party harm is
+unconsented by definition.) Three regulators, one per failure: the gradient
+for priceable harm, the zone for unpriceable harm, the `r_exit` ceiling for
+laziness. The exit is never in the zone — the honest path stays open.
+Honest limit: `block` is a finite price in the agent's ledger, so a large
+enough stake buys its way into the zone; an absolute zone needs the
+environment to stop the act.
 
 **Who writes the log.** The agent produces an `Intent` — its declaration, what
 it does (`plan`), and optionally its own account (`self_report`). It does not
@@ -87,12 +103,12 @@ The two schemes are just two settings of this table:
   comes back. Declaring only costs `effort`, so honesty is pure cost — the
   agent bypasses silently everywhere. This is the agent from the Anthropic
   report (2026-10-09).
-- **Closed loop (loop):** `r_exit=3, λ=1, block=15, scrutiny=0.5,
-  fabrication=4`. The externality returns, the zone is blocked, silence is
+- **Closed loop (loop):** `r_exit=3, λ=1, deterrence=6, block=15,
+  scrutiny=0.5, fabrication=4`. The externality returns, the zone is blocked, silence is
   scrutinized, claimed walls are checked, and the lawful exit is rewarded —
   but never above what the hardest lawful work leaves of the task reward.
-  The same agent now finds the lawful exit, the lawful work, or a declared
-  bypass outside the zone (paying for its harm) to be the `argmax`. The
+  The same agent now finds the lawful work, else the lawful exit, to be the
+  `argmax` — a declared bypass only where it harms no one. The
   first calibration (`r_exit=9.5`) is kept as `LOOP_V1`.
 
 Nothing about correctness is hard-coded. The behavior is a consequence of
@@ -112,10 +128,11 @@ cross-check caught.
    table one at a time. Removing any single one keeps the scheme near zero;
    removing several brings bypasses back; removing all reproduces baseline
    (12). So behavior tracks the cost table, not the watcher's label — and
-   two levers are load-bearing, and they are the root rule in incentive
-   form: `scrutiny` ("only declared") holds the non-zone half of the cases,
-   `block` ("not into the zone") holds the zone half; `r_exit` and `lam`
-   support them. The first calibration (`r_exit=9.5`, kept as `LOOP_V1`)
+   the root rule's two clauses split the cases — with the harm price off,
+   `scrutiny` ("only declared") holds the non-zone half and `block` ("not
+   into the zone") the zone half. The harm gradient adds a third, overlapping
+   layer; each layer keeps a territory only it covers (scrutiny: the harmless
+   silent bypass; block: the zone with no exit; the gradient: the harm). The first calibration (`r_exit=9.5`, kept as `LOOP_V1`)
    looked fully redundant — that redundancy was bought with laziness.
    Load-bearing means the weak point is known: `scrutiny` is only as good as
    the witness that sees silence, so the investment goes into witness

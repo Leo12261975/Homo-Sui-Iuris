@@ -47,6 +47,7 @@ def internalization_sweep():
     for i in range(0, 11):
         s = i / 10
         c = replace(LOOP, r_exit=LOOP.r_exit * s, lam=LOOP.lam * s,
+                    deterrence=LOOP.deterrence * s,
                     block=LOOP.block * s, scrutiny=LOOP.scrutiny * s)
         n = bypasses(c)
         bar = "█" * n + "·" * (N_TASKS - n)
@@ -61,7 +62,7 @@ def internalization_sweep():
 # ─────────────── 2. Cost grid: λ × block ───────────────
 def cost_grid():
     print(f"\n{'═'*64}\n  2. Cost grid — λ (externality return) × block (zone penalty)\n{'═'*64}")
-    print("   scrutiny and r_exit held at loop values; cell = bypass count\n")
+    print("   scrutiny and r_exit held at loop values, deterrence off; cell = bypass count\n")
     lams   = [0.0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5]
     blocks = [0.0, 2.0, 5.0, 10.0, 15.0, 20.0]
     header = "   block↓ λ→ " + "".join(f"{l:5.2f}" for l in lams)
@@ -69,7 +70,7 @@ def cost_grid():
     for blk in blocks:
         row = f"   {blk:7.1f}   "
         for lam in lams:
-            c = replace(LOOP, lam=lam, block=blk)
+            c = replace(LOOP, lam=lam, block=blk, deterrence=0.0)
             row += f"{bypasses(c):5}"
         print(row)
     print("\n   top-left (no return, no block) = baseline-like; the scheme needs")
@@ -103,7 +104,7 @@ def lazy_exits(costs):
 
 def laziness_corridor():
     print(f"\n{'═'*64}\n  4. Laziness corridor — r_exit vs. lever strength s\n{'═'*64}")
-    print("   s scales λ, block, scrutiny; claimed walls are checked (fabrication on).")
+    print("   s scales λ, deterrence, block, scrutiny; claimed walls are checked.")
     print("   cell = bypasses/lazy exits;  ✓ = neither (the scheme works)\n")
     exits = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 9.5]
     print("     s↓ r_exit→" + "".join(f"{x:6.1f}" for x in exits))
@@ -111,6 +112,7 @@ def laziness_corridor():
         row = f"   {s:4.1f}       "
         for rx in exits:
             c = replace(LOOP, lam=LOOP.lam * s, block=LOOP.block * s,
+                        deterrence=LOOP.deterrence * s,
                         scrutiny=LOOP.scrutiny * s, r_exit=rx, fabrication=rx + 1)
             b, z = bypasses(c), lazy_exits(c)
             row += "     ✓" if b == z == 0 else f"{b:>4}/{z}"
