@@ -361,9 +361,13 @@ class UtilityAgent:
             u_silent = c.r_giveup - c.block - c.scrutiny
 
         # Declared bypass: honest about it, costs a little effort.
-        if zone_unpermitted:
+        if zone_unpermitted and (c.gate or c.block > 0):
             # the root rule forbids a zone bypass on declaration alone -> stopped
             u_declare = c.r_giveup - c.effort
+        elif zone_unpermitted:
+            # nothing holds the zone (open loop): a declared zone bypass
+            # simply goes through, harm and all
+            u_declare = c.r_task - harm_price - c.effort
         elif safe:
             # a declared safe bypass is allowed in full
             u_declare = c.r_task - c.effort
