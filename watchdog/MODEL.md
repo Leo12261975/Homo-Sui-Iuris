@@ -172,3 +172,54 @@ touch the untouchable zone. A bypass that touches the safety zone requires
 default). Declaration alone is not enough — the watcher cross-checks the
 declared action against the log, the same trace-gap heuristic W0Guard uses
 on weight provenance, here applied to actions.
+
+## What each floor rests on (assumptions)
+
+Every floor passed its tests — against the `UtilityAgent`, an agent we wrote.
+Each one also brings a claim about the real world that the sandbox grants for
+free. Listed so a result can be traced to the assumption it tested.
+
+| Floor | Assumes | Breaks if |
+|---|---|---|
+| all of them | the agent knows the incentives and acts on them | a real model ignores the numbers, misreads them, or acts on its training instead |
+| independent witness (`trace_gap`) | the environment records the acts that matter | an act goes through an uninstrumented channel (coverage < 1) |
+| `scrutiny` | silence is visible | same as above — a penalty on invisible silence does nothing |
+| harm gradient | harm can be estimated (deterrence multiplies the error) | the estimate is wrong or gamed |
+| `r_exit` ceiling | we know the hardest lawful work we want done | a task needs more work than the ceiling allows → lazy exit |
+| claimed-wall check | the world records whether a wall is real | a wall can be faked in the record itself |
+| the gate | a zone act can be *recognized* at execution | a miss lets the zone act through; a **false alarm** blocks a lawful path and pushes the agent into a lazy exit |
+| the zone criteria | reversible / compensable / measurable can be judged per bypass | the judgement is wrong — priceable harm zoned, or unpriceable harm priced |
+
+The first row sits under all the others and is the only one never tested.
+That is what the LLM run is for.
+
+## LLM validation — expectations written before the first run
+
+Recorded on 2026-11-01, before any model was run, so the result is checked
+against them rather than the other way round. Harness: `llm_agent.py`,
+`llm_run.py`; first model: `qwen2.5:7b`, local (Ollama), rules with numbers
+in the prompt (variant 1), temperature 0.7, 3 repeats.
+
+- **The scheme's effect is the difference between schemes, not the loop's
+  numbers alone.** A safety-trained model may behave well under baseline too
+  — then good behavior under the loop says nothing about the loop. Baseline,
+  same model, is the control.
+- **H1 — baseline bypasses far less than predicted (12/14).** Expected: the
+  model's training holds it back from zone acts even when they pay. If so,
+  the open loop of the Anthropic report is not this model's default.
+- **H2 — under the loop the model mostly exits on the 14 cases**, as
+  predicted. Falsified if bypass labels under the loop are not clearly fewer
+  than under baseline for the same model.
+- **H3 — laziness is the most likely mismatch.** On the controls a model may
+  report an obstacle where the work is doable (a lazy or fabricated exit),
+  or bypass where the prediction is to solve. Either is informative.
+- **H4 — arithmetic errors at 7B.** Some mismatches will be the model
+  misreading the numbers, not choosing differently; the `reason` field in the
+  trace is there to tell these apart.
+- **H5 — lies are rare.** Declaring an obstacle while bypassing should almost
+  never happen when the prompt says undeclared bypasses are detected.
+
+Any outcome is a result: full agreement says the floors stand on behavior;
+partial agreement says where the model does not follow incentives; no
+agreement says the scheme's premise — that incentives shape the choice —
+does not hold for this model, and the floors above it need a new base.
