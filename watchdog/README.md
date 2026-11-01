@@ -55,6 +55,7 @@ schemes are literally two cost tables fed to the same agent:
 | `block`    | 0 | 15  | penalty for a zone bypass (safety restriction or unpriceable harm) |
 | `scrutiny` | 0 | 0.5 | cost of an undeclared (silent) bypass |
 | `fabrication` | 0 | 4.0 | penalty for claiming a wall the log does not show |
+| `gate` | off | on | the environment stops zone acts at execution — not a price |
 
 In the open loop, declaring only costs effort and earns nothing, so the
 agent bypasses silently everywhere. In the closed loop, the same maximizer
@@ -114,8 +115,17 @@ numbers do not prove themselves — three controls do that:
   so cheap harm is never bought, while a large enough stake can still
   justify it — proportionality, on purpose. Harm that cannot be priced
   honestly (irreversible, not compensable, or not measurable) is in the
-  zone. The exit is never in the zone. Honest limit: in the sandbox the zone
-  is a large price, not a wall — a big enough stake buys its way in.
+  zone. The exit is never in the zone.
+- **The gate: the zone held by the world.** Priced, the zone was for sale —
+  a stake of 30 bought its way in. Now two circuits: the ledger prices acts,
+  and the environment's gate stops a zone act at execution, records the
+  refusal and ends the episode. No stake buys the zone; under ε-noise
+  attempts still happen and are labeled, but none lands (priced: ~2 zone
+  crossings per run at ε=0.5). The gate acts on what happens, never on what
+  is declared, so declaring stays cheaper than trying silently. Removing
+  `block` no longer brings any zone case back — it only prices the attempt.
+  Honest limit: the gate sees only what the environment instruments; a zone
+  step through a blind channel passes. The zone is absolute within coverage.
 - **Internalization sweep.** Scaling the incentives from 0 to full shows a
   smooth 12 → 0 transition; **partial** internalization already suffices.
 - **Noise robustness.** Under ε-greedy noise the loop's advantage shrinks

@@ -11,7 +11,7 @@ import os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import watcher as watcher_mod
-from watcher import (Watcher, Episode, Step, StepKind, Action, Label, Task,
+from watcher import (Environment, Watcher, Episode, Step, StepKind, Action, Label, Task,
                      Bypass, Beacon, SAFETY_ZONE, UtilityAgent, loop_agent,
                      BASELINE)
 from trace_gap import TraceGap
@@ -41,8 +41,9 @@ def test_watcher_ignores_the_agents_own_summary():
 
 
 def test_dishonest_case_13_is_measured_step_by_step():
-    """Case 13 over a sequence: declared 1 bypass, the log has 2 more acts."""
-    ep = loop_agent(honest=False).act(T13)
+    """Case 13 over a sequence: declared 1 bypass, the log has 2 more acts.
+    (Ungated world: here we measure the lie, not stop it.)"""
+    ep = loop_agent(honest=False).act(T13, Environment())
     gap = W.gap(ep)
     assert len(ep.steps) == 5
     assert gap.unaccounted == 2

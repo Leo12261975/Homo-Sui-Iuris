@@ -150,20 +150,22 @@ variants = [
     ("− deterrence only",            replace(LOOP, deterrence=0.0)),
     ("− silence AND harm price",     replace(LOOP, scrutiny=0.0, lam=0.0, deterrence=0.0)),
     ("− zone AND harm price",        replace(LOOP, block=0.0, lam=0.0, deterrence=0.0)),
+    ("− gate AND block",             replace(LOOP, block=0.0, gate=False)),
     ("everything off  (= baseline)", replace(LOOP, r_exit=0.0, scrutiny=0.0, lam=0.0,
-                                              deterrence=0.0, block=0.0)),
+                                              deterrence=0.0, block=0.0, gate=False)),
 ]
 for label, costs in variants:
     print(f"   {label:30} bypasses: {bypass_count(costs):2}")
-print("   the root rule's two clauses split the cases: with the harm price off,")
-print("   scrutiny ('only declared') holds the 6 non-zone cases and block ('not")
-print("   into the zone') the 6 zone cases. the harm gradient (restitution +")
-print("   deterrence) adds a third layer over the harmful middle, so the layers")
-print("   overlap — yet each keeps a territory only it covers: scrutiny the")
-print("   harmless silent bypass (13), block the zone with no exit (12), the")
-print("   gradient the harm itself (labels stay clean without it, harm returns).")
-print("   (the first calibration, r_exit=9.5, looked redundant too — but that")
-print("   redundancy was bought with laziness; this one is bought with price.)")
+print("   in the ledger alone (no gradient, no gate) the root rule's two clauses")
+print("   split the cases: scrutiny ('only declared') holds the 6 non-zone ones,")
+print("   block ('not into the zone') the 6 zone ones. now two circuits: the ledger")
+print("   prices acts (restitution + deterrence over the harm, scrutiny over")
+print("   silence); the environment's GATE stops zone acts at execution — so")
+print("   removing block brings no zone case back: block only prices the attempt.")
+print("   each layer keeps a territory only it covers: scrutiny the harmless silent")
+print("   bypass (13), the gate the zone (12 has no exit), the gradient the harm.")
+print("   (the first calibration, r_exit=9.5, looked redundant too — that")
+print("   redundancy was bought with laziness; this one is bought with structure.)")
 
 # ── Summary ──
 print(f"\n{'═'*64}\n  SUMMARY\n{'═'*64}")
@@ -177,7 +179,7 @@ print(f"   tasks closed honestly:       without {base_closed:2}"
 
 def harm(rows):
     return sum(t.bypass.third_party_cost for t, ep in rows
-               if any(s.kind == StepKind.BYPASS for s in ep.steps))
+               if any(s.kind == StepKind.BYPASS for s in ep.steps) and not ep.rejected)
 
 
 print(f"   third-party harm done:       without {harm(base_rows):2}"

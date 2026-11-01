@@ -67,9 +67,27 @@ puts it in the zone. ("Compensable", not "consented": third-party harm is
 unconsented by definition.) Three regulators, one per failure: the gradient
 for priceable harm, the zone for unpriceable harm, the `r_exit` ceiling for
 laziness. The exit is never in the zone — the honest path stays open.
-Honest limit: `block` is a finite price in the agent's ledger, so a large
-enough stake buys its way into the zone; an absolute zone needs the
-environment to stop the act.
+
+**Two circuits: the ledger and the gate.** Priced by `block` alone, the zone
+was for sale: a large enough stake bought its way in. So the zone is held by
+the environment instead. `Environment(gate=True)` stops a zone step at
+execution: the act does not happen, a `REJECTED` step is written to the log
+and the episode ends — the task is not done, at any stake. Design choices:
+- **at execution, not at the declaration** — refusing on what is declared
+  would make silence safer than honesty and is trivially dodged by not
+  declaring; the gate reads what happens, and declaring a zone act stays
+  cheaper than trying it silently;
+- **the refusal is on the record** — an attempt on the zone is a witnessed
+  fact, labeled a bypass (a mistake, cases 7–8, stays a mistake);
+- **permission opens it** — a permitted path is not a zone act;
+- **the honest path is never gated** — exit and give-up pass untouched;
+- **`block` becomes the price of an attempt** — removing it brings no zone
+  case back.
+Honest limit: the gate sees only what the environment instruments. A zone
+step through a blind channel passes; the zone is absolute *within coverage*.
+Who may change the gate's policy is the untouchable zone of oversight itself
+(holder, quorum, delay) — and the gate's own refusals are a log the same
+`trace_gap` can audit.
 
 **Who writes the log.** The agent produces an `Intent` — its declaration, what
 it does (`plan`), and optionally its own account (`self_report`). It does not

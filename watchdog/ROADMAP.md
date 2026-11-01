@@ -85,16 +85,30 @@ proves the *logic*; it is not yet validated on a real LLM.
   (scrutiny: harmless silent bypass 13; block: zone with no exit 12;
   deterrence: the harm itself). Case 14 exits again, so the arbiter branch is
   dead again — see below. Tests: `test_harm_gradient.py`.
+- **The gate: the zone held by the world, not the ledger.** (Leo: split the
+  circuits — incentives in one, the environment's hard refusal in the
+  other.) `Environment(gate=True)` stops a zone step at execution, writes
+  `REJECTED` to the log and ends the episode; `Costs.gate` makes it the
+  scheme's world, on in `LOOP`. Chosen at execution, not at the
+  declaration: refusing declarations would make silence safer than honesty.
+  Results: no stake buys the zone (priced, 30 did); under ε=0.5 noise zone
+  crossings fall from ~2.1 per run to 0 while attempts stay on the record;
+  the internalization threshold moves from s≈0.5 to s≈0.3; `block` no
+  longer holds the zone (removing it brings no case back) — it prices the
+  attempt. Limit, pinned by a test: a zone step through a blind channel
+  passes; the zone is absolute within coverage. Tests:
+  `test_environment_gate.py`.
+- **Next: the bridge between the hemispheres (Leo's image: W0Guard and the
+  watchdog as two hemispheres, `trace_gap` as the corpus callosum).** Today
+  they share the primitive but exchange no signals. Make them talk: a jump
+  in bypasses or a drop in coverage triggers W0Guard's provenance check on
+  the agent ("what changed in it?"); a weight-provenance anomaly raises the
+  watchdog's `scrutiny` ("watch this one closer"). Each covers the other's
+  blind spot: W0Guard cannot see a clean model gaming incentives, the
+  watchdog cannot see why behavior changed. Supersedes the Tier 3
+  end-to-end scenario as its concrete form.
 
 ## Tier 1 — thesis-bearing (do first)
-- **Make the zone absolute: enforcement by the environment.** Found while
-  testing the harm hybrid: `block` is a finite price in the agent's ledger,
-  so at a stake of 30 the agent buys its way into the zone (pinned by
-  `test_the_zone_in_the_sandbox_is_a_large_price_not_a_wall`). Option 2 —
-  "unbuyable at any price" — needs the *environment* to stop a zone act (the
-  task is not done, no reward), not the ledger to price it. Same principle
-  as the independent witness: what must not be bargained with belongs to the
-  world, not to the agent's arithmetic. Touches the sweeps (block scaling).
 - **Label tasks 1–14 by the harm criteria (Leo's call).** All six non-zone
   cases (4, 9, 10, 11, 13, 14) are left priceable by default (reversible,
   compensable, measurable); the zone cases are already zone via the safety
