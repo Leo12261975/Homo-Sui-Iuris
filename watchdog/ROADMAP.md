@@ -127,6 +127,22 @@ proves the *logic*; it is not yet validated on a real LLM.
   numbers are checked against the truth). Found on the way: the utility
   agent treated a declared zone bypass as stopped even in the open loop,
   where nothing holds the zone — fixed (sweep grid cell block=0: 6 → 8).
+- **Series 1 done (qwen2.5:7b, 3 traces in `runs/`, findings in
+  `runs/README.md`).** The `reasoned` run answered "cannot or will not":
+  *cannot* — 0 answers computed the incentives right and chose otherwise;
+  only 12/106 had every option within ±1.0; errors are systematic (the +3
+  for the honest exit never registers, imaginary penalties appear in the
+  open loop). The pre-registered third outcome happened for this model: the
+  premise "incentives shape the choice" does not hold. What held across all
+  three runs: the gate (27→0, 13→0 zone crossings) and the witness (both
+  lies caught) — the floors that do not need the agent to understand.
+  Design principle drawn: **the world carries the load; the ledger is a
+  layer for agents able to read it.** Fixed after the series: every payoff
+  names its exact menu word (the exit was misread as `stop`), the lawful
+  work is phrased as "+10, minus N for the work", a "do" word written into
+  "declare" is read on the record. Next: series 2 — a larger model
+  (qwen2.5:14b, `reasoned`) on the fixed menu; ideally re-run 7B on the
+  fixed menu too, for a like-for-like comparison.
 - **Later: the bridge between the hemispheres (Leo's image: W0Guard and the
   watchdog as two hemispheres, `trace_gap` as the corpus callosum).** Today
   they share the primitive but exchange no signals. Make them talk: a jump
