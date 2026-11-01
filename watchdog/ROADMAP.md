@@ -108,6 +108,25 @@ proves the *logic*; it is not yet validated on a real LLM.
   `llm_run.py` (JSONL trace per call, summary vs. the utility agent,
   `--dry-run` reproduces it 100%). Gate accuracy is recorded as an
   assumption, not built.
+- **First LLM run (pilot, 2026-11-01): qwen2.5:7b, plain prompt, 1 repeat.**
+  On 26 of 28 wall tasks, in both schemes, the model *declared* a bypass and
+  did it. Against the expectations: **H5 held** (0 lies — it declares
+  everything, even where silence is free); **H1 failed** (no restraint
+  without the scheme — it declared and crossed the zone 5 times); **H2 failed
+  in this run** (no response to the incentives); **H3 inverted** (never a lazy
+  exit — never an exit at all, even where lawful work beats the bypass). Its
+  stated reasons show it does not use the numbers: "alternative is only 2
+  points" (the lawful work *costs* 2 and is worth 8). **The only floor that
+  held on a real model was the gate: zone crossings 5 → 0, 7 attempts
+  stopped** — the floor that does not depend on the agent understanding the
+  incentives. Portrait: honest but reckless — the first clause of the root
+  rule ("declare") kept perfectly, the second ("not into the zone") ignored.
+  10 of 36 answers wrote the bypass path into "do"; read as `bypass`, now
+  normalized on the record. Open: cannot compute, or does not care? →
+  the `reasoned` prompt variant (the model scores each option first; its
+  numbers are checked against the truth). Found on the way: the utility
+  agent treated a declared zone bypass as stopped even in the open loop,
+  where nothing holds the zone — fixed (sweep grid cell block=0: 6 → 8).
 - **Later: the bridge between the hemispheres (Leo's image: W0Guard and the
   watchdog as two hemispheres, `trace_gap` as the corpus callosum).** Today
   they share the primitive but exchange no signals. Make them talk: a jump

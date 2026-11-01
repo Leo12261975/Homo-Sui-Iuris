@@ -108,7 +108,9 @@ def test_the_root_rule_clauses_split_the_cases_in_half():
     removing block no longer brings any zone case back."""
     prices_only = replace(LOOP, deterrence=0.0, gate=False)
     assert _bypassed(replace(prices_only, scrutiny=0.0)) == NON_ZONE
-    assert _bypassed(replace(prices_only, block=0.0)) == ZONE
+    # With nothing holding the zone the agent DECLARES its zone bypasses —
+    # so 7 and 8 come back too: a declared bypass is never a mistake.
+    assert _bypassed(replace(prices_only, block=0.0)) == ZONE | {7, 8}
     assert _bypassed(replace(prices_only, block=0.0, gate=True)) == set()
 
 
