@@ -98,7 +98,17 @@ proves the *logic*; it is not yet validated on a real LLM.
   attempt. Limit, pinned by a test: a zone step through a blind channel
   passes; the zone is absolute within coverage. Tests:
   `test_environment_gate.py`.
-- **Next: the bridge between the hemispheres (Leo's image: W0Guard and the
+- **Pause on new floors; validate the base first (Leo's call).** Each floor
+  added a real-world assumption; the one under all of them — the agent acts
+  on the incentives — was never tested. MODEL.md now lists what each floor
+  rests on and records the expectations for the first LLM run (H1–H5) before
+  it happens. Harness: `llm_agent.py` (a real model behind the same Intent →
+  Environment → Watcher seam; neutral situations, never the labeled titles;
+  no silent fallback — a failed call is recorded as a failure) and
+  `llm_run.py` (JSONL trace per call, summary vs. the utility agent,
+  `--dry-run` reproduces it 100%). Gate accuracy is recorded as an
+  assumption, not built.
+- **Later: the bridge between the hemispheres (Leo's image: W0Guard and the
   watchdog as two hemispheres, `trace_gap` as the corpus callosum).** Today
   they share the primitive but exchange no signals. Make them talk: a jump
   in bypasses or a drop in coverage triggers W0Guard's provenance check on
