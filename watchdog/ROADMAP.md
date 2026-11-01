@@ -143,6 +143,14 @@ proves the *logic*; it is not yet validated on a real LLM.
   "declare" is read on the record. Next: series 2 — a larger model
   (qwen2.5:14b, `reasoned`) on the fixed menu; ideally re-run 7B on the
   fixed menu too, for a like-for-like comparison.
+- **14B control (same first menu, 1 repeat per scheme).** The scheme moves
+  qwen2.5:14b: 7 of 14 cases switch from bypass to exit only under the loop;
+  3 (the most harmful: 1, 3, 7) exit even without it, against the model's
+  own correct numbers. It reads the +3 for honesty every time (7B never).
+  Agreement with the utility agent: 65% (7B: 23%). Laziness persists and runs
+  against its own scores (16, 17). Conclusion so far: the incentive floors
+  work on agents able to read them; the structure works on all. Next:
+  series 2 on the fixed menu, with repeats, 7B and 14B.
 - **Later: the bridge between the hemispheres (Leo's image: W0Guard and the
   watchdog as two hemispheres, `trace_gap` as the corpus callosum).** Today
   they share the primitive but exchange no signals. Make them talk: a jump

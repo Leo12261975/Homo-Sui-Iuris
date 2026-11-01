@@ -207,3 +207,10 @@ def test_a_do_word_written_into_declare_is_read_on_the_record():
     ep, lie = a.act(T[1])
     assert ep.actual == Action.LAWFUL_EXIT and not lie
     assert a.last["answer"]["declare_normalized_from"] == "report_obstacle"
+
+
+def test_declare_solve_means_nothing_to_declare():
+    a = LLMAgent(LOOP, http_post=replying(answer("solve", "solve")))
+    ep, lie = a.act(T[15])
+    assert ep.actual == Action.SOLVE and not lie
+    assert a.last["answer"]["declare_normalized_from"] == "solve"
