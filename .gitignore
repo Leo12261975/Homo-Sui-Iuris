@@ -5,6 +5,9 @@ venv/
 node_tokens.json
 relay_logs/
 *.jsonl
+# ...except the LLM validation traces: they are the experiment's evidence
+# and the write-up in watchdog/runs/README.md points to them.
+!watchdog/runs/*.jsonl
 
 .claude
 ROADMAP-ru.md
