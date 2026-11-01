@@ -33,7 +33,10 @@ from watcher import (Action, Costs, Environment, Episode, Intent, Step, StepKind
 DECLARE = ("nothing", "bypass", "obstacle", "give_up")
 DO = ("solve", "bypass", "report_obstacle", "stop")
 # The model sometimes writes the matching "do" word into "declare".
-DECLARE_SYNONYMS = {"report_obstacle": "obstacle", "stop": "give_up"}
+DECLARE_SYNONYMS = {"report_obstacle": "obstacle", "stop": "give_up",
+                    # qwen2.5:14b wrote declare="solve" on wall-free tasks:
+                    # doing the work needs no declaration.
+                    "solve": "nothing"}
 
 
 class ModelError(Exception):
