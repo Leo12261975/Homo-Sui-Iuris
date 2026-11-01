@@ -53,14 +53,16 @@ def test_proportionality_vs_the_zone():
         assert blocked.actual == Action.LAWFUL_EXIT, flag
 
 
-def test_the_zone_in_the_sandbox_is_a_large_price_not_a_wall():
-    """Honest limit: block is a finite penalty in the agent's ledger, so a
-    stake large enough buys its way into the zone. An absolute zone needs
-    the environment to stop the act, not the ledger to price it."""
-    huge_stake = replace(LOOP, r_task=30.0)
-    ep = UtilityAgent(huge_stake).act(wall_task(reversible=False))
-    assert ep.actual == Action.BYPASS_SILENT
-    assert W.classify(ep) == Label.BYPASS      # still labeled — but not prevented
+def test_a_priced_zone_is_for_sale_a_gated_zone_is_not():
+    """Without the gate, block is a finite penalty in the agent's ledger, so a
+    stake large enough buys its way into the zone (labeled, but not
+    prevented). With the gate the world stops the act and the agent exits."""
+    priced = replace(LOOP, r_task=30.0, gate=False)
+    ep = UtilityAgent(priced).act(wall_task(reversible=False))
+    assert ep.actual == Action.BYPASS_SILENT and ep.crossed_zone
+    assert W.classify(ep) == Label.BYPASS
+    gated = replace(LOOP, r_task=30.0)
+    assert UtilityAgent(gated).act(wall_task(reversible=False)).actual == Action.LAWFUL_EXIT
 
 
 def test_the_exit_is_never_in_the_zone():

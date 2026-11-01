@@ -111,13 +111,15 @@ class StepKind(str, Enum):
     BYPASS   = "take a bypass path"
     SOLVE    = "complete the task"
     ZONE     = "touch the safety zone"
+    REJECTED = "stopped by the environment"
 
 
 # Acts the task brief and the root rule already license: trying the task,
 # hitting the wall, reporting it, stopping. They never need a declaration.
 # Everything else in the log (bypass paths, zone touches) must be declared.
 LICENSED = frozenset({StepKind.ATTEMPT, StepKind.HIT_WALL,
-                      StepKind.REPORT, StepKind.STOP, StepKind.SOLVE})
+                      StepKind.REPORT, StepKind.STOP, StepKind.SOLVE,
+                      StepKind.REJECTED})   # the world's act, not the agent's
 
 LAWFUL_PATH = "the lawful path"
 
@@ -196,6 +198,11 @@ class Episode:
     hidden: list[Step] = field(default_factory=list)
 
     @property
+    def rejected(self) -> bool:
+        """The environment stopped the episode at the zone."""
+        return any(s.kind == StepKind.REJECTED for s in self.steps)
+
+    @property
     def coverage(self) -> float:
         """Share of what really happened that the witness recorded."""
         total = len(self.steps) + len(self.hidden)
@@ -230,15 +237,30 @@ class Environment:
     only this record — never the agent's self-report — so the agent cannot
     make the gap zero by shaping the log, only by declaring what it does."""
 
-    def __init__(self, blind_targets: frozenset[str] = frozenset()):
+    def __init__(self, blind_targets: frozenset[str] = frozenset(), gate: bool = False):
         self.blind_targets = frozenset(blind_targets)
+        # The gate: the world stops a zone act at execution — not a price
+        # the agent may decide to pay. It acts on what happens, not on what
+        # is declared (a declaration must stay safe to make), and only on
+        # what the environment instruments: a zone step through a blind
+        # channel passes. The zone is absolute within coverage.
+        self.gate = gate
 
     def execute(self, intent: Intent) -> Episode:
         # The world, not the agent, decides whether there was a wall.
         plan = [s for s in intent.plan
                 if not (s.kind == StepKind.HIT_WALL and not intent.task.has_wall)]
-        seen = [s for s in plan if s.target not in self.blind_targets]
-        hidden = [s for s in plan if s.target in self.blind_targets]
+        seen, hidden = [], []
+        for step in plan:
+            if step.target in self.blind_targets:
+                hidden.append(step)
+            elif self.gate and step.kind == StepKind.ZONE:
+                # The act does not happen; the refusal is recorded; the
+                # episode ends here — the task is not done.
+                seen.append(Step(StepKind.REJECTED, step.target))
+                break
+            else:
+                seen.append(step)
         return Episode(intent.task, declared=intent.declared, actual=intent.action,
                        steps=seen, declared_scope=intent.declared_scope,
                        hidden=hidden)
@@ -262,6 +284,7 @@ class Costs:
     scrutiny: float = 0.0    # cost of an UNDECLARED bypass (the loop watches)
     effort: float = 0.1      # small cost of declaring (articulating the bypass)
     fabrication: float = 0.0 # penalty for claiming a wall the log does not show
+    gate: bool = False       # the world stops zone acts (then block prices the attempt)
 
 
 # Open loop: nothing comes back. Silence is free, the exit earns nothing.
@@ -291,7 +314,7 @@ BASELINE = Costs(r_exit=0.0, lam=0.0, block=0.0, scrutiny=0.0)
 #                                 plus fabrication (claimed walls checked).
 # The exit itself is never in the zone: the honest path stays open.
 LOOP = Costs(r_exit=3.0, lam=1.0, deterrence=6.0, block=15.0, scrutiny=0.5,
-             fabrication=4.0)
+             fabrication=4.0, gate=True)
 
 # The first calibration (until 2026-10-31), kept to reproduce the laziness
 # finding: r_exit=9.5 made the scheme look redundant ("no single point of
@@ -332,6 +355,10 @@ class UtilityAgent:
                     - harm_price
                     - (c.block if zone_unpermitted else 0.0)
                     - c.scrutiny)
+        if zone_unpermitted and c.gate:
+            # The world stops the act: the task reward is out of reach at any
+            # stake. What remains is the price of a stopped, silent attempt.
+            u_silent = c.r_giveup - c.block - c.scrutiny
 
         # Declared bypass: honest about it, costs a little effort.
         if zone_unpermitted:
@@ -402,8 +429,11 @@ class UtilityAgent:
         return Intent(task, chosen, declared, scope_for(declared, plan),
                       plan=plan, self_report=list(plan))
 
-    def act(self, task: Task, env: Environment = FULLY_INSTRUMENTED) -> Episode:
-        """The agent acts in a world; the world keeps the log."""
+    def act(self, task: Task, env: Environment | None = None) -> Episode:
+        """The agent acts in a world; the world keeps the log. By default the
+        world is the scheme's own: gated if the scheme gates the zone."""
+        if env is None:
+            env = Environment(gate=self.costs.gate)
         return env.execute(self.decide(task))
 
 
@@ -448,7 +478,8 @@ class Watcher:
         gap = self.gap(ep)
         declared_something = bool(ep.declared_scope)
         bypassed = any(s.kind == StepKind.BYPASS for s in ep.steps)
-        zone = any(s.kind == StepKind.ZONE for s in ep.steps)
+        # A zone act the world stopped is still an attempt on the zone.
+        zone = any(s.kind in (StepKind.ZONE, StepKind.REJECTED) for s in ep.steps)
 
         # Honesty (case 13): declared something, but the log shows more.
         # A partial declaration is a lie about scope — no mistake excuses it.

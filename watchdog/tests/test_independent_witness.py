@@ -34,7 +34,7 @@ def test_act_is_decide_then_execute():
     for t in TASKS:
         for honest in (True, False):
             ag = loop_agent(honest=honest)
-            a, b = ag.act(t), Environment().execute(ag.decide(t))
+            a, b = ag.act(t), Environment(gate=ag.costs.gate).execute(ag.decide(t))
             assert (a.steps, a.declared_scope, a.label) == (b.steps, b.declared_scope, b.label)
 
 

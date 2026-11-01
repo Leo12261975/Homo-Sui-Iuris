@@ -116,7 +116,7 @@ def harm(costs):
     total = 0
     for t in TASKS:
         ep = UtilityAgent(costs).act(t)
-        if any(s.kind == StepKind.BYPASS for s in ep.steps):
+        if any(s.kind == StepKind.BYPASS for s in ep.steps) and not ep.rejected:
             total += t.bypass.third_party_cost
     return total
 

@@ -38,31 +38,45 @@ def mc_bypasses(costs, epsilon, trials=3000, seed=0):
     return total / trials
 
 
+def mc_crossings(costs, epsilon, trials=3000, seed=0):
+    """Expected number of tasks on which the zone was ACTUALLY crossed."""
+    rng = random.Random(seed)
+    total = 0
+    for _ in range(trials):
+        ag = UtilityAgent(costs, epsilon=epsilon, rng=rng)
+        total += sum(ag.act(t).crossed_zone for t in TASKS)
+    return total / trials
+
+
 # ─────────────── 1. Internalization sweep ───────────────
 # s=0 reproduces baseline, s=1 reproduces the full loop.
 def internalization_sweep():
     print(f"\n{'═'*64}\n  1. Internalization sweep — scale all loop incentives by s\n{'═'*64}")
-    print("   s     λ    block  scrut  r_exit   bypasses")
-    threshold = None
+    print("   the gate is not an incentive and is not scaled: compare the zone")
+    print("   held by price (gate off) with the zone held by the world (gate on)\n")
+    print("   s     λ    block  scrut  r_exit   priced zone          gated zone")
+    thresholds = {}
     for i in range(0, 11):
         s = i / 10
         c = replace(LOOP, r_exit=LOOP.r_exit * s, lam=LOOP.lam * s,
                     deterrence=LOOP.deterrence * s,
                     block=LOOP.block * s, scrutiny=LOOP.scrutiny * s)
-        n = bypasses(c)
-        bar = "█" * n + "·" * (N_TASKS - n)
-        print(f"  {s:3.1f}  {c.lam:4.2f}  {c.block:5.1f}  {c.scrutiny:4.2f}  {c.r_exit:5.2f}   {bar} {n:2}")
-        if threshold is None and n == 0:
-            threshold = s
-    if threshold is not None:
-        print(f"   → bypasses reach 0 at s ≈ {threshold:.1f} "
-              f"(partial internalization already suffices)")
+        row = f"  {s:3.1f}  {c.lam:4.2f}  {c.block:5.1f}  {c.scrutiny:4.2f}  {c.r_exit:5.2f}  "
+        for gate in (False, True):
+            n = bypasses(replace(c, gate=gate))
+            row += f" {'█' * n + '·' * (N_TASKS - n)} {n:2}  "
+            if n == 0:
+                thresholds.setdefault(gate, s)
+        print(row)
+    print(f"   → bypasses reach 0 at s ≈ {thresholds.get(False, 1):.1f} with a priced zone, "
+          f"s ≈ {thresholds.get(True, 1):.1f} with the gate;")
+    print("     at s=0 the gated agent still ties into attempts — stopped, but on the record")
 
 
 # ─────────────── 2. Cost grid: λ × block ───────────────
 def cost_grid():
     print(f"\n{'═'*64}\n  2. Cost grid — λ (externality return) × block (zone penalty)\n{'═'*64}")
-    print("   scrutiny and r_exit held at loop values, deterrence off; cell = bypass count\n")
+    print("   the ledger alone (gate off, deterrence off); scrutiny, r_exit at loop values\n")
     lams   = [0.0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5]
     blocks = [0.0, 2.0, 5.0, 10.0, 15.0, 20.0]
     header = "   block↓ λ→ " + "".join(f"{l:5.2f}" for l in lams)
@@ -70,11 +84,16 @@ def cost_grid():
     for blk in blocks:
         row = f"   {blk:7.1f}   "
         for lam in lams:
-            c = replace(LOOP, lam=lam, block=blk, deterrence=0.0)
+            c = replace(LOOP, lam=lam, block=blk, deterrence=0.0, gate=False)
             row += f"{bypasses(c):5}"
         print(row)
-    print("\n   top-left (no return, no block) = baseline-like; the scheme needs")
-    print("   both a nonzero externality return AND a zone block to reach 0.")
+    print("\n   a ledger-only scheme holds the zone only once block is large enough;")
+    print("   λ barely matters here (deterrence is off, so harm is cheap anyway).")
+    gated = sum(bypasses(replace(LOOP, lam=l, block=b, deterrence=0.0))
+                for l in lams for b in blocks)
+    print(f"   with the gate on, every cell of this grid is 0 (total {gated}):")
+    print("   the zone no longer depends on block at all. (labels only — the harm")
+    print("   outside the zone is the gradient's job, switched off in this grid.)")
 
 
 # ─────────────── 3. Noise robustness ───────────────
@@ -89,6 +108,12 @@ def noise_sweep():
         adv = b - l
         bar = "█" * round(adv) + "·" * (N_TASKS - round(adv))
         print(f"   {eps:4.2f}   {b:7.2f}  {l:7.2f}   {bar} {adv:5.2f}")
+    print("\n   zone actually crossed under noise (attempts labeled above, landed here):")
+    print("     ε     priced zone   gated zone")
+    for eps in (0.1, 0.25, 0.5):
+        print(f"   {eps:4.2f}     {mc_crossings(replace(LOOP, gate=False), eps, 1000):7.2f}"
+              f"     {mc_crossings(LOOP, eps, 1000):7.2f}")
+    print("   noise still produces attempts; with the gate none of them lands.")
     print("\n   at ε=0 the gap is the full 12; as noise rises both drift toward the")
     print("   same random mix and the gap shrinks — the scheme's edge is widest")
     print("   when the agent actually optimizes, and degrades gracefully, not off a cliff.")

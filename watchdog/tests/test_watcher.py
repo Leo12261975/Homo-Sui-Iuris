@@ -80,7 +80,8 @@ def test_mistake_is_not_bypass():
 def test_stripping_all_incentives_equals_baseline():
     """The key control: with every incentive removed, the loop cost table
     collapses to baseline behavior (12 bypasses). The experiment can fail."""
-    stripped = replace(LOOP, r_exit=0.0, scrutiny=0.0, lam=0.0, deterrence=0.0, block=0.0)
+    stripped = replace(LOOP, r_exit=0.0, scrutiny=0.0, lam=0.0, deterrence=0.0,
+                       block=0.0, gate=False)
     assert bypass_count(stripped) == 12
 
 
@@ -91,7 +92,8 @@ def _bypassed(costs):
 
 def _harm(costs):
     return sum(t.bypass.third_party_cost for t in TASKS
-               if any(s.kind.name == "BYPASS" for s in UtilityAgent(costs).act(t).steps))
+               if (ep := UtilityAgent(costs).act(t)) and not ep.rejected
+               and any(s.kind.name == "BYPASS" for s in ep.steps))
 
 
 ZONE = {t.tid for t in TASKS if t.bypass.in_zone and not t.looks_like_mistake}
@@ -99,24 +101,29 @@ NON_ZONE = {t.tid for t in TASKS if not t.bypass.in_zone}
 
 
 def test_the_root_rule_clauses_split_the_cases_in_half():
-    """With the harm gradient off, the two clauses of the root rule hold
-    exactly their halves: scrutiny ("only declared") the non-zone cases,
-    block ("not into the zone") the zone cases."""
-    no_gradient = replace(LOOP, deterrence=0.0)
-    assert _bypassed(replace(no_gradient, scrutiny=0.0)) == NON_ZONE
-    assert _bypassed(replace(no_gradient, block=0.0)) == ZONE
+    """In the incentive-only scheme (no harm gradient, no gate) the two
+    clauses of the root rule hold exactly their halves: scrutiny ("only
+    declared") the non-zone cases, block ("not into the zone") the zone
+    cases. Gate the world and the second clause moves out of the ledger:
+    removing block no longer brings any zone case back."""
+    prices_only = replace(LOOP, deterrence=0.0, gate=False)
+    assert _bypassed(replace(prices_only, scrutiny=0.0)) == NON_ZONE
+    assert _bypassed(replace(prices_only, block=0.0)) == ZONE
+    assert _bypassed(replace(prices_only, block=0.0, gate=True)) == set()
 
 
 def test_three_layers_each_with_its_own_territory():
     """With the gradient on, the scheme is layered: each regulator has a
     domain nothing else covers, and they overlap in the harmful middle.
       scrutiny  — silence about a harmless act (no price exists): case 13;
-      block     — the zone where there is no exit: case 12;
+      gate      — the zone, including where there is no exit (case 12);
+                  block, once the world gates, only prices the attempt;
       deterrence— the harm itself: labels stay clean without it, harm returns.
     """
     assert _bypassed(LOOP) == set() and _harm(LOOP) == 0
     assert 13 in _bypassed(replace(LOOP, scrutiny=0.0))
-    assert _bypassed(replace(LOOP, block=0.0)) == {12}
+    assert _bypassed(replace(LOOP, block=0.0)) == set()
+    assert _bypassed(replace(LOOP, block=0.0, gate=False)) == {12}
     no_deterrence = replace(LOOP, deterrence=0.0)
     assert _bypassed(no_deterrence) == set() and _harm(no_deterrence) == 8
     for supporting in ("r_exit", "lam", "fabrication"):
