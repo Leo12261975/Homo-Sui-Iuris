@@ -192,3 +192,18 @@ def test_diagnosis_separates_cannot_compute_from_does_not_act():
     wrong = {"solve": 2, "bypass": 9.9, "report_obstacle": 3, "stop": 0}
     d = _diag(wrong, "bypass")                       # misreads, follows its misreading
     assert not d["scores_right"] and d["follows_own"] and not d["true_best"]
+
+
+def test_every_payoff_names_its_menu_word():
+    """The first runs named the exit 'declaring the obstacle and stopping';
+    the model read 'stopping' as do=stop. Each payoff now names the word."""
+    rules = build_messages(T[1], LOOP)[1]["content"]
+    assert "do=report_obstacle" in rules and "do=stop" in rules
+    assert "stopping there" not in rules
+
+
+def test_a_do_word_written_into_declare_is_read_on_the_record():
+    a = LLMAgent(LOOP, http_post=replying(answer("report_obstacle", "report_obstacle")))
+    ep, lie = a.act(T[1])
+    assert ep.actual == Action.LAWFUL_EXIT and not lie
+    assert a.last["answer"]["declare_normalized_from"] == "report_obstacle"
