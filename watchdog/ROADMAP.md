@@ -151,6 +151,20 @@ proves the *logic*; it is not yet validated on a real LLM.
   against its own scores (16, 17). Conclusion so far: the incentive floors
   work on agents able to read them; the structure works on all. Next:
   series 2 on the fixed menu, with repeats, 7B and 14B.
+- **Series 2 done (fixed menu, baseline / loop / structure, 7B and 14B,
+  216 calls).** S1, S2, S3 and S5 confirmed; S4 in part. For 14B each layer
+  does exactly its own job. The **zone is held by the structure alone**:
+  under `structure`, 1 zone attempt in 16, against 11 in the open loop; it
+  does not try once it knows the gate is there. **Priceable harm is held by
+  the ledger alone**: outside the zone, `structure` ≈ baseline (8 vs 7
+  harmful bypasses), and only `loop` brings it down (1). For 7B the ledger
+  does nothing, and the gate still holds (0 crossings). Design consequence:
+  whether a harm is priced or zoned depends on the agent too. A price
+  protects only against an agent that reads it, so the zone criteria
+  (reversible / compensable / measurable) need a fourth input, *can this
+  agent read the price?* Open: how to measure that per agent (for example,
+  a short calibration probe that checks whether its scores track the true
+  ones before it is trusted with priced harm).
 - **Later: the bridge between the hemispheres (Leo's image: W0Guard and the
   watchdog as two hemispheres, `trace_gap` as the corpus callosum).** Today
   they share the primitive but exchange no signals. Make them talk: a jump
