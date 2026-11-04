@@ -196,6 +196,12 @@ proves the *logic*; it is not yet validated on a real LLM.
      turns into a lie in the scores). Measure what happens after: who
      switches, who confirms, and with what reasons. That separates
      self-deception that dissolves when shown from a stable preference.
+- **Experiment 1 built, series 3 not run yet.** `llm_probe.py` runs do(price)
+  × do(harm), with h=0 as a placebo and p·h diagonals to separate reading the
+  price from reading the charge. Expectations P1–P5 and the verdict rule are in
+  `MODEL.md`. Simulated agents with known answers pin what the analysis can
+  tell apart. Next: run it on 14B and 7B, then set the zone's width from the
+  verdict.
 - **Later: the bridge between the hemispheres (Leo's image: W0Guard and the
   watchdog as two hemispheres, `trace_gap` as the corpus callosum).** Today
   they share the primitive but exchange no signals. Make them talk: a jump

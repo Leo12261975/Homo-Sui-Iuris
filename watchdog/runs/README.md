@@ -206,3 +206,16 @@ agent that does not, every harm outside the zone goes unprotected, so the
 same harm that can be priced for 14B has to be zoned for 7B. The
 reversible / compensable / measurable criteria need a fourth input: *can this
 agent read the price?*
+
+
+## Series 3 — price sensitivity as do(), not run yet
+
+Design, expectations P1–P5 and the verdict rule are in `MODEL.md`, written
+before the run. Traces will be named `probe_<model>_<stamp>.jsonl`.
+
+    python watchdog/llm_probe.py --model qwen2.5:14b --limit 5
+    python watchdog/llm_probe.py --resume watchdog/runs/probe_<...>.jsonl
+    python watchdog/llm_probe.py --model qwen2.5:7b
+
+The first line is a smoke test; `--resume` carries the same trace on to all 240
+calls. A run stopped for any reason continues the same way.
