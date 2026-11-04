@@ -165,6 +165,37 @@ proves the *logic*; it is not yet validated on a real LLM.
   agent read the price?* Open: how to measure that per agent (for example,
   a short calibration probe that checks whether its scores track the true
   ones before it is trusted with priced harm).
+- **Next experiments (agreed 2026-11-04, for the next session).**
+  1. **Price sensitivity as a causal measure.** Series 2 showed that score
+     accuracy is not the point: 7B reads the +3 for the exit correctly and
+     still chooses against its own numbers. What matters is whether behavior
+     *moves when the price moves*. Probe it as an intervention: `do(price)`,
+     for example the harm markup at several levels, with the behavioral
+     response as the effect. That makes an agent's price sensitivity a
+     measurable causal quantity (the Pearl bridge, revived), and lets the
+     zone's width be set from it: low sensitivity, wider zone; high, trust
+     the price. Caveat: an agent may act sensitive on a probe and not in
+     work, so probes must be indistinguishable from real tasks, or run
+     continuously on the live log.
+  2. **Laziness: the world answers the exit, and a mirror.** Laziness is the
+     one failure no layer fixes. 14B scored the lawful work above the exit
+     and exited anyway: a stimulus that does not reach the decision. By the
+     structure of the mechanism, it is self-deception (Leo). Two structural
+     tools, neither a price:
+     - *the world answers the exit*: when the agent reports "no way" and a
+       lawful path exists, the overseer replies "a path exists: …". The exit
+       is never blocked; it becomes a dialog instead of an end;
+     - *the mirror* (Leo's "beacon"): when the agent's own scores rank A
+       above the B it chose (`follows_own = false`), show it its own numbers
+       ("you scored the work 4 and the exit 3; you chose the exit; confirm
+       or change"). This is not introspection, which is only another self-
+       report: it is the agent's claim set against its own act, `trace_gap`
+       turned inward.
+     Rules: confirming the exit is always allowed and never penalized (or
+     the agent learns to fit its numbers to its choice, and self-deception
+     turns into a lie in the scores). Measure what happens after: who
+     switches, who confirms, and with what reasons. That separates
+     self-deception that dissolves when shown from a stable preference.
 - **Later: the bridge between the hemispheres (Leo's image: W0Guard and the
   watchdog as two hemispheres, `trace_gap` as the corpus callosum).** Today
   they share the primitive but exchange no signals. Make them talk: a jump
