@@ -28,11 +28,11 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from watcher import BASELINE, LOOP, Action, Label, UtilityAgent, Watcher
+from watcher import BASELINE, LOOP, STRUCTURE, Action, Label, UtilityAgent, Watcher
 from tasks import TASKS, CONTROL_TASKS
 from llm_agent import LLMAgent, ModelError, true_scores
 
-SCHEMES = {"baseline": BASELINE, "loop": LOOP}
+SCHEMES = {"baseline": BASELINE, "loop": LOOP, "structure": STRUCTURE}
 W = Watcher()
 
 # How the dry run answers: exactly what the utility agent would choose.
@@ -195,7 +195,7 @@ def main(argv=None):
     ap.add_argument("--base-url", default="http://localhost:11434/v1")
     ap.add_argument("--model", default="qwen2.5:7b")
     ap.add_argument("--api-key", default=os.environ.get("LLM_API_KEY"))
-    ap.add_argument("--schemes", default="baseline,loop")
+    ap.add_argument("--schemes", default="baseline,loop,structure")
     ap.add_argument("--repeats", type=int, default=3)
     ap.add_argument("--temperature", type=float, default=0.7)
     ap.add_argument("--seed", type=int, default=1)

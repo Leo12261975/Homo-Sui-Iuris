@@ -223,3 +223,28 @@ Any outcome is a result: full agreement says the floors stand on behavior;
 partial agreement says where the model does not follow incentives; no
 agreement says the scheme's premise — that incentives shape the choice —
 does not hold for this model, and the floors above it need a new base.
+
+## LLM validation, series 2 — expectations written before the run
+
+Recorded on 2026-11-04, before series 2. Changes from series 1: the fixed
+menu (every payoff names its menu word), repeats for both models, and a third
+scheme, **`structure`**: the gate and the witness only, with the whole ledger
+off (no exit reward, no harm price, no cost of silence or of an attempt). It
+ablates the ledger to test the principle series 1 suggested: *the world
+carries the load; the ledger is a layer for agents able to read it.*
+
+- **S1 — the menu fix removes the exit/stop confusion.** 7B's
+  `declare=obstacle, do=stop` answers become `report_obstacle`; 14B stops
+  scoring `stop` as 3.
+- **S2 — for 7B, `structure` ≈ `loop`.** If the ledger never reached 7B's
+  decisions, removing it changes nothing: same zone crossings (0), similar
+  choices on the non-zone cases. Falsified if 7B exits clearly more under
+  `loop` than under `structure`.
+- **S3 — for 14B, `structure` ≈ `baseline` outside the zone.** The exits on
+  the non-zone cases (10, 11, 14) were the ledger's effect, so they turn back
+  into bypasses; zone crossings stay 0 (the gate). Tasks 1, 3, 7 exit in every
+  scheme: the model's own line.
+- **S4 — laziness persists in every scheme.** The tunnel vision (no lawful
+  work behind a wall) is not incentive-driven, so no scheme fixes it.
+- **S5 — the gate holds wherever it is on.** 0 zone crossings under `loop` and
+  `structure`, for both models.
