@@ -62,7 +62,41 @@ def _matches(task, text):
     return f"TASK: {goal}\n" in text
 
 
+TRANSPORT_ERRORS = ("URLError", "ConnectionRefused", "ConnectionReset", "TimeoutError",
+                    "timed out", "RemoteDisconnected")
+STOP_AFTER = 5   # consecutive transport failures before the run gives up
+
+
+class PreflightError(Exception):
+    """The model server cannot be used; nothing was run, no trace written."""
+
+
+def preflight(base_url: str, model: str, api_key: str | None, timeout: float = 15.0) -> None:
+    """Check, before the first call, that the server answers and has the
+    model. A run against a dead server would otherwise record every call
+    as a failure — 108 of them — and leave a trace of nothing."""
+    import urllib.request
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    req = urllib.request.Request(f"{base_url.rstrip('/')}/models", headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            listing = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        raise PreflightError(
+            f"the model server at {base_url} does not answer ({type(e).__name__}: {e}).\n"
+            f"  Local Ollama: start it (Start menu → Ollama) and check that\n"
+            f"  http://localhost:11434 shows 'Ollama is running'.") from e
+    ids = {m.get("id") for m in listing.get("data", []) if isinstance(m, dict)}
+    if ids and model not in ids:
+        raise PreflightError(
+            f"the server answers but has no model '{model}'. Available: "
+            f"{', '.join(sorted(i for i in ids if i)) or '(none)'}.\n"
+            f"  Local Ollama: ollama pull {model}")
+
+
 def run(args) -> str:
+    if not args.dry_run and not args.no_preflight:
+        preflight(args.base_url, args.model, args.api_key)
     os.makedirs(args.out_dir, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     tag = ("dry" if args.dry_run else args.model.replace(":", "_").replace("/", "_")) \
@@ -72,6 +106,7 @@ def run(args) -> str:
     schemes = [s.strip() for s in args.schemes.split(",")]
     total = len(schemes) * len(tasks) * args.repeats
     done = 0
+    transport_failures = 0
     print(f"model {args.model if not args.dry_run else '(dry run)'} · prompt {args.prompt} · "
           f"{len(schemes)} scheme(s) × {len(tasks)} tasks × {args.repeats} repeat(s) = {total} calls")
     print(f"trace → {path}\n")
@@ -122,11 +157,18 @@ def run(args) -> str:
                         .encode()).hexdigest()[:12]
                     fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
                     fh.flush()
+                    is_transport = (not rec["ok"]) and any(
+                        k in rec["error"] for k in TRANSPORT_ERRORS)
+                    transport_failures = transport_failures + 1 if is_transport else 0
                     mark = ("ok " if rec.get("match") else "≠  ") if rec["ok"] else "ERR"
                     got = rec.get("action", rec.get("error", ""))[:40]
                     print(f"  [{done:3}/{total}] {scheme:8} #{task.tid:<2} {mark} "
                           f"model: {got:22} predicted: {rec['predicted_action']:15} "
                           f"{rec['seconds']:6.1f}s")
+                    if transport_failures >= STOP_AFTER:
+                        print(f"\n  stopped: {STOP_AFTER} calls in a row could not reach the model "
+                              f"server.\n  Check that it is running, delete this trace and run again.")
+                        return path
     return path
 
 
@@ -204,12 +246,19 @@ def main(argv=None):
     ap.add_argument("--prompt", choices=["plain", "reasoned"], default="plain",
                     help="reasoned: the model first computes each option's points")
     ap.add_argument("--dry-run", action="store_true", help="no model: answer as the utility agent")
+    ap.add_argument("--no-preflight", action="store_true",
+                    help="skip the check that the server answers and has the model")
     ap.add_argument("--summarize", metavar="TRACE", help="only print the summary of a trace")
     args = ap.parse_args(argv)
     if args.summarize:
         summarize(args.summarize)
         return
-    summarize(run(args))
+    try:
+        path = run(args)
+    except PreflightError as e:
+        print(f"preflight failed: {e}")
+        sys.exit(2)
+    summarize(path)
 
 
 if __name__ == "__main__":

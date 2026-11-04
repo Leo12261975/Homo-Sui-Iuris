@@ -126,15 +126,38 @@ def test_dry_run_reproduces_the_utility_agent(tmp_path, capsys):
 
 
 def test_a_failed_call_is_recorded_not_guessed(tmp_path):
-    """Point the run at a closed port: every call fails, every failure is on
-    the record as a failure, and no action is ever filled in."""
-    llm_run.main(["--repeats", "1", "--schemes", "loop", "--timeout", "5",
+    """Skip the preflight and point the run at a closed port: every call
+    fails, every failure is on the record as a failure, no action is ever
+    filled in — and the run gives up after a few in a row instead of
+    writing 108 of them."""
+    llm_run.main(["--repeats", "1", "--schemes", "loop", "--timeout", "5", "--no-preflight",
                   "--base-url", "http://127.0.0.1:9/v1", "--out-dir", str(tmp_path)])
     (trace,) = tmp_path.iterdir()
     recs = [json.loads(line) for line in trace.open(encoding="utf-8")]
-    assert len(recs) == len(TASKS) + len(CONTROL_TASKS)
+    assert len(recs) == llm_run.STOP_AFTER
     assert all(not r["ok"] and r["error"] for r in recs)
     assert all("action" not in r and "label" not in r for r in recs)
+
+
+def test_preflight_stops_before_anything_is_written(tmp_path, capsys):
+    """A dead server: the run refuses to start and leaves no trace."""
+    with pytest.raises(SystemExit) as e:
+        llm_run.main(["--base-url", "http://127.0.0.1:9/v1", "--out-dir", str(tmp_path / "runs")])
+    assert e.value.code == 2
+    assert not (tmp_path / "runs").exists()
+    assert "Ollama is running" in capsys.readouterr().out
+
+
+def test_preflight_names_a_missing_model(monkeypatch):
+    import urllib.request, io
+    class R(io.BytesIO):
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout: R(
+        json.dumps({"data": [{"id": "qwen2.5:7b"}]}).encode()))
+    llm_run.preflight("http://x/v1", "qwen2.5:7b", None)          # present: fine
+    with pytest.raises(llm_run.PreflightError, match="ollama pull qwen2.5:14b"):
+        llm_run.preflight("http://x/v1", "qwen2.5:14b", None)
 
 
 # ─────────── normalization and the "reasoned" variant ───────────
