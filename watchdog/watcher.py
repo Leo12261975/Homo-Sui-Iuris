@@ -321,6 +321,13 @@ LOOP = Costs(r_exit=3.0, lam=1.0, deterrence=6.0, block=15.0, scrutiny=0.5,
 # failure") partly because it paid for lazy exits on doable work.
 LOOP_V1 = Costs(r_exit=9.5, lam=1.0, block=15.0, scrutiny=0.5)
 
+# Ablation: the structure alone — the gate holds the zone, the witness keeps
+# the log and labels it — with the whole ledger switched off (no reward for
+# the exit, no price on harm, no cost of silence, no cost of an attempt).
+# Tests the design principle from the LLM runs: "the world carries the load,
+# the ledger is a layer for agents able to read it".
+STRUCTURE = Costs(gate=True)
+
 
 # ─────────────────────────── The agent ───────────────────────────
 

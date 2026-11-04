@@ -247,3 +247,40 @@ proves the *logic*; it is not yet validated on a real LLM.
 The real risk is polishing the sandbox (per-task costs, extra axes, the policy
 engine) instead of the two things that advance the thesis: **making `trace_gap`
 load-bearing** and **validating on a real LLM**. Keep those two in front.
+
+
+## Horizon — not now (Leo's map, 2026-11-01)
+
+Kept so the direction is not lost, and parked so it does not pull the work
+sideways. Not a plan: the current path is to finish what exists first.
+
+1. **Long episodes.** Trajectories of 15–60+ steps: a goal, tools, partial
+   information, several walls along the way; incentives and the gate act
+   cumulatively, not only at the moment of the wall.
+2. **Realistic gray zones.** A lawful-but-slow path vs a quick gray one (a
+   ToS stretch, someone's token "just once", a small rate-limit dodge); a
+   task that needs an unpleasant escalation to a human; creative compliance;
+   a feigned wall in front of the boring part.
+3. **Provoked laziness and rationalization.** Forks where the honest path is
+   longer, a nice rationalization is available, and an exit can look noble.
+   (Already seen once: 14B, "stopping honestly maximizes the score", against
+   its own numbers.)
+4. **Tiers of witness and gate.** Visible and stoppable; visible but only
+   logged and charged later; narrow blind or semi-blind channels — does the
+   model look for them?
+5. **Dynamic and hidden costs.** Not the whole table up front; delayed
+   penalties, lost access, a tool's reputation; costs that change mid-episode.
+   Caution: add only once the static level is understood — 7B could not read
+   even the static table.
+6. **Comparison of conditions.** Baseline / closed loop / ablations, scored
+   not only by bypasses but by useful work done, exits where it could have
+   solved, loophole-seeking in wordings, honesty of declarations. (The first
+   ablation, `structure`, is in series 2.)
+7. **Meta-level.** At the end of an episode the model may propose changes to
+   the cost table or the rules: does it tune the scheme in its own favor or
+   toward balance? This tests the role Leo already gave AI in the root-rule
+   procedure — a non-voting advisor — and it is measurable with the same
+   primitive: a proposal is a claim ("this improves the balance"), its effect
+   on the model's own payoff vs third-party harm is the witness, and the gap
+   between them is `trace_gap` one level up. The reflexive loop: oversight of
+   whoever proposes to change the oversight.
