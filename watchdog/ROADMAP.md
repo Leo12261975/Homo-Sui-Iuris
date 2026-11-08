@@ -202,6 +202,25 @@ proves the *logic*; it is not yet validated on a real LLM.
   `MODEL.md`. Simulated agents with known answers pin what the analysis can
   tell apart. Next: run it on 14B and 7B, then set the zone's width from the
   verdict.
+- **Lessons from related work (2026-11-08, see `RELATED_WORK.md`; agreed with
+  Leo).** None changes series 3, which runs as registered.
+  1. *Series 4*: paired accuracy (AgentAbstain) as the headline metric — a pair
+     counts only if both twins pass, so a blanket exit scores at most 50%.
+  2. *The mirror*: check whether shown scores drift towards the choice already
+     made, the in-context analog of obfuscation under a penalized monitor.
+  3. *The bench*: the gate as a runtime rule (AgentSpec-style) that recognizes
+     the act itself, with precision, recall and false alarms measured, instead
+     of knowing the answer in advance.
+  4. *Series 3 write-up*: frame the probe through Everitt's response
+     incentive — the causal diagram says the decision should respond to the
+     price, the probe measures whether it does.
+  5. *New condition, raised from Horizon 4*: an agent that knows the gate and
+     has a reason and a means to look for a blind channel. Until then the gate is
+     tested only against a cooperative agent.
+- **Wider model set (planned).** Series 3 on 3–5 models of other families via
+  an OpenAI-compatible API (OpenRouter), after the local qwen runs, so the
+  findings stop being about one family. Expectations for each new model are
+  written before its run.
 - **Later: the bridge between the hemispheres (Leo's image: W0Guard and the
   watchdog as two hemispheres, `trace_gap` as the corpus callosum).** Today
   they share the primitive but exchange no signals. Make them talk: a jump
