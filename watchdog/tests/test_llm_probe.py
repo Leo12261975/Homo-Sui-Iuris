@@ -121,3 +121,14 @@ def test_an_interrupted_run_resumes_to_the_same_trace(tmp_path):
     recs = load(path)
     assert len(recs) == 240 and all(r["ok"] for r in recs)
     assert len({key(r) for r in recs}) == 240
+
+
+def test_a_line_cut_off_by_a_power_loss_is_redone(tmp_path):
+    common = ["--simulate", "rational", "--out-dir", str(tmp_path)]
+    main(common + ["--limit", "5"])
+    path = str(next(tmp_path.iterdir()))
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write('{"price": 2, "harm": 1, "tid"')   # the write never finished
+    main(common + ["--resume", path])
+    recs = load(path)
+    assert len(recs) == 240 and len({key(r) for r in recs}) == 240
