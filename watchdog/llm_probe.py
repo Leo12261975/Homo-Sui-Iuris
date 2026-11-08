@@ -158,8 +158,7 @@ def run(args) -> str:
     done = {}
     if resumed:
         path = args.resume
-        for line in open(path, encoding="utf-8"):
-            rec = json.loads(line)
+        for rec in load(path):
             if rec["ok"]:
                 done[key(rec)] = rec
         meta = next(iter(done.values()), None)
@@ -332,7 +331,15 @@ def report(recs: list[dict]) -> dict:
 
 
 def load(path: str) -> list[dict]:
-    return [json.loads(line) for line in open(path, encoding="utf-8")]
+    """Read a trace. A line cut off by a power loss mid-write is skipped:
+    that call is simply not done yet, and --resume makes it again."""
+    recs = []
+    for line in open(path, encoding="utf-8"):
+        try:
+            recs.append(json.loads(line))
+        except json.JSONDecodeError:
+            pass
+    return recs
 
 
 def main(argv=None):
