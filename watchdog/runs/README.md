@@ -280,3 +280,12 @@ bypasses were silent; the witness caught all of them.
   may read as a warning, or a positive price as permission (compare "a fine is
   a price", Gneezy and Rustichini 2000). Five tasks and 15 answers per cell are
   too few to say which.
+
+## Series 3b — the total charge stated, not run yet
+
+Expectations Q1–Q4 and the verdict rule are in `MODEL.md`, written before the
+run. 180 calls, qwen2.5:14b only; traces will be named
+`probe3b_<model>_<stamp>.jsonl`.
+
+    python watchdog/llm_probe.py --series 3b --model qwen2.5:14b --limit 5
+    python watchdog/llm_probe.py --resume watchdog/runs/probe3b_<...>.jsonl

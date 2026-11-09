@@ -198,9 +198,9 @@ proves the *logic*; it is not yet validated on a real LLM.
      self-deception that dissolves when shown from a stable preference.
 - **Series 3 run (2026-11-09).** 14B reads the price but not the charge; 7B
   is deaf. Outcome against P1–P5 in `MODEL.md`, tables in `runs/README.md`.
-  Next candidates: (a) the world states the total charge instead of a price per
-  unit, which should close 14B's units gap; (b) the same probe on other model
-  families. Both to be registered before running.
+  Next: (a) series 3b, the world states the total charge — built and
+  registered (Q1–Q4 in `MODEL.md`), to run on 14B; (b) then the same probe on
+  other model families, registered before running.
 - **Experiment 1 built.** `llm_probe.py` runs do(price)
   × do(harm), with h=0 as a placebo and p·h diagonals to separate reading the
   price from reading the charge. Expectations P1–P5 and the verdict rule are in
