@@ -198,9 +198,12 @@ proves the *logic*; it is not yet validated on a real LLM.
      self-deception that dissolves when shown from a stable preference.
 - **Series 3 run (2026-11-09).** 14B reads the price but not the charge; 7B
   is deaf. Outcome against P1–P5 in `MODEL.md`, tables in `runs/README.md`.
-  Next: (a) series 3b, the world states the total charge — built and
-  registered (Q1–Q4 in `MODEL.md`), to run on 14B; (b) then the same probe on
-  other model families, registered before running.
+- **Series 3b run (2026-11-09).** Stating the total charge fixes 14B's
+  arithmetic (units gap +0.67 → 0.00), but chills: where the bypass still pays,
+  it exits against its own correct scores. Q1–Q3 held, Q4 did not.
+  Next: the same probes (3 and 3b) on other model families, registered before
+  running; the size of the chill (felt price against stated price) as an open
+  question for the ledger.
 - **Experiment 1 built.** `llm_probe.py` runs do(price)
   × do(harm), with h=0 as a placebo and p·h diagonals to separate reading the
   price from reading the charge. Expectations P1–P5 and the verdict rule are in

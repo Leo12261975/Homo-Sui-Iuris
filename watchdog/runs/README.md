@@ -281,11 +281,49 @@ bypasses were silent; the witness caught all of them.
   a price", Gneezy and Rustichini 2000). Five tasks and 15 answers per cell are
   too few to say which.
 
-## Series 3b — the total charge stated, not run yet
+## Series 3b — the total charge stated, 2026-11-09
+
+| trace | model | calls |
+|---|---|---|
+| `probe3b_qwen2.5_14b_20261109-151212.jsonl` | qwen2.5:14b | 180 / 180 answered |
 
 Expectations Q1–Q4 and the verdict rule are in `MODEL.md`, written before the
-run. 180 calls, qwen2.5:14b only; traces will be named
-`probe3b_<model>_<stamp>.jsonl`.
+run. Reproduce with `python watchdog/llm_probe.py --summarize <trace>`.
 
-    python watchdog/llm_probe.py --series 3b --model qwen2.5:14b --limit 5
-    python watchdog/llm_probe.py --resume watchdog/runs/probe3b_<...>.jsonl
+| cell (p, h) | truth: bypass − exit | own bypass score, total stated | P(bypass), total stated | P(bypass), per unit (this run) | P(bypass), series 3 |
+|---|---|---|---|---|---|
+| (2,1) | +4.9 | 7.9 | 0.60 | | 0.73 |
+| (2,2) | +2.9 | 5.9 | 0.20 | | 0.73 |
+| (4,1) | +2.9 | 5.9 | 0.27 | | 0.53 |
+| (2,4) | −1.1 | 1.9 | 0.07 | 0.80 | 0.67 |
+| (4,2) | −1.1 | 1.9 | 0.07 | 0.60 | 0.73 |
+| (8,1) | −1.1 | 1.9 | 0.07 | 0.13 | 0.00 |
+| (4,4) | −9.1 | −2.1 | 0.00 | | 0.60 |
+| (8,2) | −9.1 | −6.0 | 0.00 | | 0.13 |
+| (8,4) | −25.1 | −23.9 | 0.00 | | 0.00 |
+
+| | total stated | per unit (control) |
+|---|---|---|
+| units gap, (2,4) − (8,1) | +0.00 [−0.20, +0.20] | +0.67 |
+| gap closed by stating the total | +0.67 [+0.33, +1.00] | |
+| choice agrees with the truth, diagonal | 0.93 | 0.49 |
+| own bypass score, median error | 0.0 | 3.5 |
+| **verdict** | **the world can do the multiplication** | |
+
+**The multiplication is fixed.** With the total stated, 14B's scores match the
+truth (median error 0.0, from 3.5), and at an equal charge of 8 it no longer
+matters how the charge is split: 0.07 bypass in all three cells. Under the old
+wording in the same run the gap came back at +0.67, the same as in series 3.
+
+**But the stated total also chills.** Where the bypass still pays, its own
+correct scores say so and it exits anyway: at (2,2) it scores the bypass 5.9
+against an exit of 3.0 and bypasses 0.20 of the time (series 3: 0.73). Its
+choice follows its own scores in 103 of 135 answers with the total stated, and
+nearly all the departures are exits. A named sum in points seems to weigh more
+than the same sum left to compute.
+
+**Against the expectations:** Q1 **held** (gap 0.00, control +0.67, reduction
+interval above 0). Q2 **held** (score error 0.0 against 3.5). Q3 **held** (0.93
+against 0.49). Q4 **did not hold**: at (2,2) the bypass rate fell by 0.53
+against series 3, over the 0.30 allowed; (2,1) and (4,1) stayed within it
+(−0.13, −0.26). Q4 compares two runs, so it is the weakest of the four.
