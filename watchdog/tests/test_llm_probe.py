@@ -183,3 +183,8 @@ def test_3b_resumes_its_own_series(tmp_path):
     assert os.path.basename(path).startswith("probe3b_")
     main(common + ["--resume", path])
     assert len(load(path)) == 180
+
+
+def test_3b_report_on_a_smoke_test_does_not_crash():
+    from llm_probe import report_3b
+    assert report_3b(sim3b("unit_blind")[:5]) == {}
