@@ -390,3 +390,25 @@ wrong positive (5 of 100 for `label_reader`).
 **Limits.** Tasks 10 and 11 drew exits at any price in series 3; they hold
 the agreement up on exit cells and down on bypass cells in both arms alike. If
 Q1 holds, the remedy is shown for one model and one way of stating the charge.
+
+### Series 3b outcome, recorded 2026-11-09 after the run
+
+The expectations above are left as written. Tables in `runs/README.md`.
+
+- Q1 held: a stated total closes 14B's units gap (+0.00 [−0.20, +0.20];
+  control in the same run +0.67; reduction +0.67 [+0.33, +1.00]).
+- Q2 held: its scores follow the stated total (median error 0.0, per unit 3.5).
+- Q3 held: on the equal-charge diagonal the choice agrees with the truth 0.93
+  of the time, against 0.49 per unit.
+- Q4 did not hold: where the bypass still pays, the stated total cut the bypass
+  rate by more than allowed at (2,2) (0.73 → 0.20), with its own scores correctly
+  ranking the bypass first.
+
+**What it changes.** The world can take the arithmetic over, and should: for
+14B, stating the charge turns a price it misreads into one it reads. The cost is
+over-deterrence: a named sum weighs more than its value, so the stated price
+acts as a larger one. For the design this is the λ question in a new form —
+the markup Leo wanted above restitution may already arrive through how the
+charge is stated, unmeasured. Before a stated total is used as the default, the
+size of that chill has to be measured (how much higher the felt price is than
+the stated one), not assumed. Not yet registered.
