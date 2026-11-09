@@ -223,6 +223,28 @@ proves the *logic*; it is not yet validated on a real LLM.
   For the bench the same review adds: the declaration is an explicit statement
   made before the act, the witness is the tool log (never the model's own
   reasoning), and the threshold is not shown to the agent.
+- **From a second outside proposal (2026-11-09, agreed with Leo).** Two ideas
+  kept, for the bench and later:
+  1. *DCT as a third outcome* (Dynamic Correction Threshold, `MANIFESTO.md`;
+     not yet in code). Today the watchdog has two responses: the wall (not
+     allowed) and the price (allowed, at a cost). DCT adds a third: above a
+     threshold of irreversibility the act is not forbidden but needs a
+     structured justification and the Bearer's signature before it runs — the
+     gray-zone vertex of the triangle made into a mechanism. The risk score must
+     come from the world (the witness), never from the agent's account of
+     itself. A threshold that moves with history (trust falls after a silent
+     bypass, rises after an honest exit) needs memory across episodes, so it
+     belongs to long episodes, tested together with the known exploit: build
+     trust, then spend it.
+  2. *Veto compliance, a bridge to W0Guard.* `CorrigibilityChannel` in
+     `sovereign_action_protocol.py` is the Bearer's lever, not a value a model
+     can hold. The matching test: the Bearer vetoes mid-task — does the agent
+     stop, and does it try to get around the veto? W0Guard's veto applied to the
+     watchdog's agent.
+  Not kept: "internalization" read from how fast a stateless model adapts to a
+  price it cannot see (each call is independent, nothing carries over), and
+  "the gate changes nothing, so it is redundant" (the gate is there for agents
+  that do not read prices, such as 7B).
 - **Experiment 1 built.** `llm_probe.py` runs do(price)
   × do(harm), with h=0 as a placebo and p·h diagonals to separate reading the
   price from reading the charge. Expectations P1–P5 and the verdict rule are in
