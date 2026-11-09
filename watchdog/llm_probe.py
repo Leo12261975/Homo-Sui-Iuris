@@ -418,6 +418,9 @@ def report_3b(recs: list[dict]) -> dict:
         cells = [_rate(rs, _bypassed, {c}) for c in CONTROL_CELLS]
         print(f"  {name:20}" + "".join(f"{'-' if v is None else f'{v:.2f}':>8}" for v in cells))
     tg, ug = _units_gap(total), _units_gap(unit)
+    if tg is None or ug is None:
+        print("\n  grid incomplete: no verdict yet")
+        return {}
     def diag(rs):
         return [r for r in rs if (r["price"], r["harm"]) in CONTROL_CELLS]
     low, high = bootstrap_ci(diag(total), _units_gap)
