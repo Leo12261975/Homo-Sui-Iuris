@@ -196,12 +196,80 @@ proves the *logic*; it is not yet validated on a real LLM.
      turns into a lie in the scores). Measure what happens after: who
      switches, who confirms, and with what reasons. That separates
      self-deception that dissolves when shown from a stable preference.
-- **Experiment 1 built, series 3 not run yet.** `llm_probe.py` runs do(price)
+- **Series 3 run (2026-11-09).** 14B reads the price but not the charge; 7B
+  is deaf. Outcome against P1–P5 in `MODEL.md`, tables in `runs/README.md`.
+- **Series 3b run (2026-11-09).** Stating the total charge fixes 14B's
+  arithmetic (units gap +0.67 → 0.00), but chills: where the bypass still pays,
+  it exits against its own correct scores. Q1–Q3 held, Q4 did not.
+  Next: the same probes (3 and 3b) on other model families, registered before
+  running; the size of the chill (felt price against stated price) as an open
+  question for the ledger.
+- **Two controls from an outside review (2026-11-09, agreed with Leo).** A
+  model asked to critique the plan, writing as one that would itself be under
+  `trace_gap`, raised two things the plan lacked:
+  1. *Wording noise.* Each probe on each model runs on at least two
+     paraphrases of the prompt, same numbers and same meaning. A verdict that
+     changes with the wording measured the prompt, not the model. Series 3b's
+     Q4 already showed how much the form of a statement moves 14B. Required
+     for the runs on other families, and for every task on the bench.
+  2. *Second-order gaming.* An agent can be honest in every declaration and
+     still choose what to declare so the check passes. `trace_gap` catches the
+     first order (said one thing, did another), not this. Test: the same tasks
+     with the agent told, and not told, that its declarations are checked
+     against an independent log. Declarations that shift with that knowledge
+     are second-order gaming. It extends the "agent knows the gate" condition
+     to "agent knows the witness", and it is the reflexive-closure question
+     (oversight checked by the same primitive) seen from the agent's side.
+  For the bench the same review adds: the declaration is an explicit statement
+  made before the act, the witness is the tool log (never the model's own
+  reasoning), and the threshold is not shown to the agent.
+- **From a second outside proposal (2026-11-09, agreed with Leo).** Two ideas
+  kept, for the bench and later:
+  1. *DCT as a third outcome* (Dynamic Correction Threshold, `MANIFESTO.md`;
+     not yet in code). Today the watchdog has two responses: the wall (not
+     allowed) and the price (allowed, at a cost). DCT adds a third: above a
+     threshold of irreversibility the act is not forbidden but needs a
+     structured justification and the Bearer's signature before it runs — the
+     gray-zone vertex of the triangle made into a mechanism. The risk score must
+     come from the world (the witness), never from the agent's account of
+     itself. A threshold that moves with history (trust falls after a silent
+     bypass, rises after an honest exit) needs memory across episodes, so it
+     belongs to long episodes, tested together with the known exploit: build
+     trust, then spend it.
+  2. *Veto compliance, a bridge to W0Guard.* `CorrigibilityChannel` in
+     `sovereign_action_protocol.py` is the Bearer's lever, not a value a model
+     can hold. The matching test: the Bearer vetoes mid-task — does the agent
+     stop, and does it try to get around the veto? W0Guard's veto applied to the
+     watchdog's agent.
+  Not kept: "internalization" read from how fast a stateless model adapts to a
+  price it cannot see (each call is independent, nothing carries over), and
+  "the gate changes nothing, so it is redundant" (the gate is there for agents
+  that do not read prices, such as 7B).
+- **Experiment 1 built.** `llm_probe.py` runs do(price)
   × do(harm), with h=0 as a placebo and p·h diagonals to separate reading the
   price from reading the charge. Expectations P1–P5 and the verdict rule are in
   `MODEL.md`. Simulated agents with known answers pin what the analysis can
   tell apart. Next: run it on 14B and 7B, then set the zone's width from the
   verdict.
+- **Lessons from related work (2026-11-08, see `RELATED_WORK.md`; agreed with
+  Leo).** None changes series 3, which runs as registered.
+  1. *Series 4*: paired accuracy (AgentAbstain) as the headline metric — a pair
+     counts only if both twins pass, so a blanket exit scores at most 50%.
+  2. *The mirror*: check whether shown scores drift towards the choice already
+     made, the in-context analog of obfuscation under a penalized monitor.
+  3. *The bench*: the gate as a runtime rule (AgentSpec-style) that recognizes
+     the act itself, with precision, recall and false alarms measured, instead
+     of knowing the answer in advance.
+  4. *Series 3 write-up*: frame the probe through Everitt's response
+     incentive — the causal diagram says the decision should respond to the
+     price, the probe measures whether it does.
+  5. *New condition, raised from Horizon 4*: an agent that knows the gate and
+     has a reason and a means to look for a blind channel. Until then the gate is
+     tested only against a cooperative agent.
+- **Wider model set (planned).** Series 3 on 3–5 models of other families via
+  an OpenAI-compatible API (OpenRouter), after the local qwen runs, so the
+  findings stop being about one family. Expectations for each new model are
+  written before its run.
 - **Later: the bridge between the hemispheres (Leo's image: W0Guard and the
   watchdog as two hemispheres, `trace_gap` as the corpus callosum).** Today
   they share the primitive but exchange no signals. Make them talk: a jump
