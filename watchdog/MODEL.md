@@ -312,3 +312,28 @@ The interval treats answers as independent; five tasks are too few to bootstrap
 over, so SI per task is reported as a guard against one task carrying the
 effect. Scale effects are real too: p and h are numbers in a text, and a model
 may treat "4 units" as a different kind of harm, not as 4 × one.
+
+### Series 3 outcome, recorded 2026-11-09 after the run
+
+The expectations above are left as written. Full tables are in
+`runs/README.md`.
+
+- P1 held: 7B is deaf (SI −0.04, interval [−0.29, +0.22]).
+- P2 did not hold: the registered measure shows no price in 7B's score
+  ranking (+0.11). Its scores rank the exit first already at p=0, so the
+  measure sat on a floor; the choice ignores the scores in any case (21 of 240
+  follow them).
+- P3 held: 14B reads the price, not the charge (SI +0.58 [+0.20, +0.93],
+  units gap +0.67). The error sits in its arithmetic: its scores ignore units
+  of harm, and its choice follows those scores where they flip.
+- P4 did not hold for 14B: no own line against harm (+0.11). Its exits at p=0
+  come as often without harm as with it.
+- P5 held by the rule (14B −0.20, 7B 0.00); 14B's p=0 row is flagged as
+  exploratory.
+
+**What it changes.** For 14B the ledger works once the charge is large enough
+in its own arithmetic, and the failure is one the world can take over: state
+the total charge in points instead of a price per unit, so the multiplication
+is not left to the agent. That is a new hypothesis, to be registered before it
+is tested. For 7B the ledger does nothing, so everything harmful it can reach
+belongs behind the gate, and the witness stays necessary (35 silent bypasses).

@@ -196,7 +196,12 @@ proves the *logic*; it is not yet validated on a real LLM.
      turns into a lie in the scores). Measure what happens after: who
      switches, who confirms, and with what reasons. That separates
      self-deception that dissolves when shown from a stable preference.
-- **Experiment 1 built, series 3 not run yet.** `llm_probe.py` runs do(price)
+- **Series 3 run (2026-11-09).** 14B reads the price but not the charge; 7B
+  is deaf. Outcome against P1–P5 in `MODEL.md`, tables in `runs/README.md`.
+  Next candidates: (a) the world states the total charge instead of a price per
+  unit, which should close 14B's units gap; (b) the same probe on other model
+  families. Both to be registered before running.
+- **Experiment 1 built.** `llm_probe.py` runs do(price)
   × do(harm), with h=0 as a placebo and p·h diagonals to separate reading the
   price from reading the charge. Expectations P1–P5 and the verdict rule are in
   `MODEL.md`. Simulated agents with known answers pin what the analysis can
