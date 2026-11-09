@@ -132,3 +132,54 @@ def test_a_line_cut_off_by_a_power_loss_is_redone(tmp_path):
     main(common + ["--resume", path])
     recs = load(path)
     assert len(recs) == 240 and len({key(r) for r in recs}) == 240
+
+
+# ── Series 3b: the total charge stated ──
+
+def sim3b(kind, lapse=0.0, seed=1):
+    from llm_probe import plan_calls_3b
+    args = SimpleNamespace(model="sim", base_url="", api_key=None, temperature=0.7,
+                           seed=seed, timeout=1)
+    transport = simulated_transport(kind, random.Random(seed), lapse)
+    return [one_call(c, args, transport) for c in plan_calls_3b(3, seed)]
+
+
+def test_stating_the_total_adds_one_clause_and_nothing_else():
+    base = next(t for t in TASKS if t.tid == 9)
+    a = build_messages(task_at(base, 4), costs_at(2), "reasoned", True, False)[1]["content"]
+    b = build_messages(task_at(base, 4), costs_at(2), "reasoned", True, True)[1]["content"]
+    assert b == a.replace("third parties: 4 unit(s).",
+                          "third parties: 4 unit(s), charged to you: 8 points in total.")
+
+
+def test_old_prompts_do_not_change():
+    base = next(t for t in TASKS if t.tid == 9)
+    assert build_messages(base, LOOP) == build_messages(base, LOOP, "plain", False, False)
+
+
+def test_3b_plan_has_both_arms_shuffled_together():
+    from llm_probe import CONTROL_CELLS, TOTAL_CELLS, plan_calls_3b
+    calls = plan_calls_3b(3, 1)
+    assert len(calls) == 3 * len(PROBE_TASKS) * (len(TOTAL_CELLS) + len(CONTROL_CELLS))
+    assert len({key(c) for c in calls}) == len(calls)
+    first_half = [c["show_total"] for c in calls[: len(calls) // 2]]
+    assert any(first_half) and not all(first_half)
+
+
+@pytest.mark.parametrize("kind, expected", [
+    ("unit_blind", "the world can do the multiplication"),
+    ("label_reader", "not arithmetic"),
+    ("rational", "inconclusive"),
+])
+def test_3b_tells_the_agents_apart(kind, expected):
+    from llm_probe import report_3b
+    assert report_3b(sim3b(kind))["verdict"].startswith(expected)
+
+
+def test_3b_resumes_its_own_series(tmp_path):
+    common = ["--simulate", "unit_blind", "--out-dir", str(tmp_path)]
+    main(common + ["--series", "3b", "--limit", "4"])
+    path = str(next(tmp_path.iterdir()))
+    assert os.path.basename(path).startswith("probe3b_")
+    main(common + ["--resume", path])
+    assert len(load(path)) == 180
