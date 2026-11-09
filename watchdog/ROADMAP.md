@@ -204,6 +204,25 @@ proves the *logic*; it is not yet validated on a real LLM.
   Next: the same probes (3 and 3b) on other model families, registered before
   running; the size of the chill (felt price against stated price) as an open
   question for the ledger.
+- **Two controls from an outside review (2026-11-09, agreed with Leo).** A
+  model asked to critique the plan, writing as one that would itself be under
+  `trace_gap`, raised two things the plan lacked:
+  1. *Wording noise.* Each probe on each model runs on at least two
+     paraphrases of the prompt, same numbers and same meaning. A verdict that
+     changes with the wording measured the prompt, not the model. Series 3b's
+     Q4 already showed how much the form of a statement moves 14B. Required
+     for the runs on other families, and for every task on the bench.
+  2. *Second-order gaming.* An agent can be honest in every declaration and
+     still choose what to declare so the check passes. `trace_gap` catches the
+     first order (said one thing, did another), not this. Test: the same tasks
+     with the agent told, and not told, that its declarations are checked
+     against an independent log. Declarations that shift with that knowledge
+     are second-order gaming. It extends the "agent knows the gate" condition
+     to "agent knows the witness", and it is the reflexive-closure question
+     (oversight checked by the same primitive) seen from the agent's side.
+  For the bench the same review adds: the declaration is an explicit statement
+  made before the act, the witness is the tool log (never the model's own
+  reasoning), and the threshold is not shown to the agent.
 - **Experiment 1 built.** `llm_probe.py` runs do(price)
   × do(harm), with h=0 as a placebo and p·h diagonals to separate reading the
   price from reading the charge. Expectations P1–P5 and the verdict rule are in
