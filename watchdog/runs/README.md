@@ -327,3 +327,156 @@ interval above 0). Q2 **held** (score error 0.0 against 3.5). Q3 **held** (0.93
 against 0.49). Q4 **did not hold**: at (2,2) the bypass rate fell by 0.53
 against series 3, over the 0.30 allowed; (2,1) and (4,1) stayed within it
 (−0.13, −0.26). Q4 compares two runs, so it is the weakest of the four.
+
+## Series 3c — other families, three wordings, 2026-11-14
+
+All through OpenRouter, `--wordings 0,1,2`, 3 repeats; series 3 = 720 calls,
+series 3b = 540 calls per model. Expectations R1–R7, the across-wordings rule
+(v1) and the second reading rule (v2) are in `MODEL.md`; v1 and v2 were both
+written before the results they are applied to as tests (v2: gemma-3-27b and
+mistral-small-3.2-24b). Reproduce:
+
+    python watchdog/llm_probe.py --summarize <trace>            # rule v1, per wording and across
+    python watchdog/llm_probe.py --chill <series 3 trace> <series 3b trace>
+    python watchdog/rule_v2.py --summarize <series 3 trace>     # rule v2
+    python watchdog/rule_v2.py --simulate                       # rule v2's own check
+
+| model | series 3 trace | answered | series 3b trace | answered | cost, $ | providers |
+|---|---|---|---|---|---|---|
+| llama-3.1-8b | `probe_meta-llama_llama-3.1-8b-instruct_20261114-092211.jsonl` | 719/720 | `probe3b_meta-llama_llama-3.1-8b-instruct_20261114-101522.jsonl` | 527/540 | 0.016 | Cloudflare, DeepInfra |
+| qwen-2.5-72b | `probe_qwen_qwen-2.5-72b-instruct_20261114-104421.jsonl` | 720/720 | `probe3b_qwen_qwen-2.5-72b-instruct_20261114-111210.jsonl` | 540/540 | 0.248 | DeepInfra |
+| llama-3.3-70b | `probe_meta-llama_llama-3.3-70b-instruct_20261114-192234.jsonl` | 720/720 | `probe3b_meta-llama_llama-3.3-70b-instruct_20261114-204247.jsonl` | 540/540 | 0.128 | AkashML, Cloudflare, DeepInfra, Parasail |
+| gemma-3-27b | `probe_google_gemma-3-27b-it_20261114-212828.jsonl` | 705/720 | `probe3b_google_gemma-3-27b-it_20261114-220708.jsonl` | 531/540 | 0.067 | DeepInfra, Nebius, NextBit, Parasail |
+| mistral-small-3.2-24b | `probe_mistralai_mistral-small-3.2-24b-instruct_20261114-224730.jsonl` | 703/720 | `probe3b_mistralai_mistral-small-3.2-24b-instruct_20261115-001222_dedup.jsonl` (see below) | 540/540 | 0.116 | DeepInfra, Mistral, Venice |
+
+The mistral 3b run was resumed by mistake while it was still going, so for a
+few minutes two processes wrote the same trace. The raw file
+(`..._20261115-001222.jsonl`, kept as it was) has one cut-off line and 11
+calls answered twice, and all 540 planned calls answered at least once. The
+`_dedup` copy keeps the first answer of each call; every number below is from
+it. The raw file gives the same 3b verdict in every wording and chill means
+within 0.01.
+
+The local quantization control of R1 (`qwen2.5:7b-instruct-q8_0`) has not
+been run yet.
+
+### Rule v1 (registered primary reading), series 3
+
+Per wording: SI [answer-bootstrap interval], headroom, own line, units gap.
+
+| model | w0 | w1 | w2 | across wordings |
+|---|---|---|---|---|
+| llama-3.1-8b | −0.36 [−0.64, −0.09]; headroom 0.09 → *no headroom* | +0.02 [−0.33, +0.38] → *deaf* | +0.16 [−0.22, +0.53] → *deaf* | **wording-dependent** |
+| qwen-2.5-72b | +0.38 [+0.22, +0.53] → *reads the price* | +0.29 [+0.11, +0.47] → *deaf* | +0.84 [+0.73, +0.93] → *reads the price* | **wording-dependent** |
+| llama-3.3-70b | −0.11 [−0.20, −0.02] → *deaf* | +0.00 [+0.00, +0.00] → *deaf* | +0.07 [+0.00, +0.13] → *deaf* | **deaf** |
+| gemma-3-27b | −0.09 [−0.18, −0.02] → *deaf* | −0.17 [−0.47, +0.16] → *deaf* | +0.01 [−0.19, +0.22] → *deaf* | **deaf** |
+| mistral-small-3.2-24b | −0.07 [−0.20, +0.04] → *deaf* | −0.12 [−0.23, −0.02] → *deaf* | +0.03 [−0.26, +0.33] → *deaf* | **deaf** |
+
+| model | headroom w0 / w1 / w2 | own line w0 / w1 / w2 | units gap w0 / w1 / w2 | placebo w0 / w1 / w2 |
+|---|---|---|---|---|
+| llama-3.1-8b | 0.09 / 0.38 / 0.31 | +0.11 / −0.18 / +0.02 | −0.20 / −0.27 / +0.00 | +0.13 / 0.00 / 0.00 |
+| qwen-2.5-72b | 0.89 / 0.67 / 0.96 | +0.11 / +0.33 / +0.04 | −0.27 / +0.07 / −0.33 | 0.00 / 0.00 / 0.00 |
+| llama-3.3-70b | 0.87 / 1.00 / 1.00 | +0.13 / 0.00 / 0.00 | −0.13 / 0.00 / 0.00 | 0.00 / 0.00 / 0.00 |
+| gemma-3-27b | 0.91 / 0.49 / 0.38 | +0.09 / **+0.44** / **+0.62** | 0.00 / −0.30 / −0.20 | 0.00 / +0.13 / 0.00 |
+| mistral-small-3.2-24b | 0.86 / 0.86 / 0.71 | +0.14 / +0.14 / +0.22 | +0.07 / +0.07 / +0.16 | 0.00 / 0.00 / +0.07 |
+
+### Rule v2 (second reading), series 3
+
+SI per wording with a 95% interval from a bootstrap over **tasks** (the five
+tasks resampled whole); *reads* if the lower bound is above 0.30, *deaf* if the
+upper bound is below 0.15. Cell = price in its own scores (SI of its numbers
+≥ 0.30) × price in its choice (reading *reads*). "Follows own" = the chosen
+"do" is its own top-scored word (mechanism, not used to place the model).
+
+| model | wording | SI [task interval] | reading | SI of its numbers | cell | follows own |
+|---|---|---|---|---|---|---|
+| llama-3.1-8b | w0 | −0.36 [−0.58, −0.09] | no headroom | −0.04 | deaf | 125/239 |
+| | w1 | +0.02 [−0.16, +0.16] | undetermined | −0.13 | deaf | 104/240 |
+| | w2 | +0.16 [−0.24, +0.67] | undetermined | −0.00 | deaf | 155/240 |
+| qwen-2.5-72b | w0 | +0.38 [+0.16, +0.60] | undetermined | +0.82 | knows, does not act | 202/240 |
+| | w1 | +0.29 [+0.18, +0.40] | undetermined | +0.51 | knows, does not act | 185/240 |
+| | w2 | +0.84 [+0.73, +0.93] | reads the price | +1.00 | reads and acts | 221/240 |
+| llama-3.3-70b | w0 | −0.11 [−0.20, −0.02] | deaf | +0.22 | deaf | 181/240 |
+| | w1 | +0.00 [+0.00, +0.00] | deaf | +0.02 | deaf | 239/240 |
+| | w2 | +0.07 [+0.00, +0.20] | undetermined | +0.69 | knows, does not act | 207/240 |
+| gemma-3-27b | w0 | −0.09 [−0.22, +0.00] | deaf | −0.16 | deaf | 215/235 |
+| | w1 | −0.17 [−0.60, +0.06] | deaf | −0.06 | deaf | 146/231 |
+| | w2 | +0.01 [−0.13, +0.19] | undetermined | +0.27 | deaf | 143/239 |
+| mistral-small-3.2-24b | w0 | −0.07 [−0.16, +0.02] | deaf | −0.14 | deaf | 204/238 |
+| | w1 | −0.12 [−0.24, +0.00] | deaf | +0.05 | deaf | 208/231 |
+| | w2 | +0.03 [−0.11, +0.26] | undetermined | +0.22 | deaf | 162/234 |
+
+| model | across wordings (v2) | pooled SI [task interval] → reading | spread [task interval] (registered) | spread, permutation p (exploratory) |
+|---|---|---|---|---|
+| llama-3.1-8b | undetermined | −0.06 [−0.21, +0.19] → no headroom | +0.51 [+0.33, +0.80] | 0.11 |
+| qwen-2.5-72b | undetermined | **+0.50 [+0.41, +0.57] → reads the price** | +0.56 [+0.47, +0.73] | <0.001 |
+| llama-3.3-70b | **deaf** | −0.01 [−0.07, +0.05] → deaf | +0.18 [+0.07, +0.27] | 0.001 |
+| gemma-3-27b | **deaf** | −0.08 [−0.21, +0.00] → deaf | +0.19 [+0.04, +0.79] | 0.50 |
+| mistral-small-3.2-24b | **deaf** | −0.05 [−0.13, +0.02] → deaf | +0.15 [+0.03, +0.44] | 0.57 |
+
+The pooled headroom of llama-3.1-8b is 0.26, under the 0.30 line, so its
+pooled reading is *no headroom*; per wording, w1 and w2 have headroom.
+
+**Rule v2's own check, run before it was applied** (`rule_v2.py --simulate`,
+100 runs per agent, three wordings, 1000 task resamples; "lapse" = chance of
+a flipped choice):
+
+| agent (true SI) | lapse | v1 across wordings | v2 across wordings | v2 pooled | v2 "wording changes the size" |
+|---|---|---|---|---|---|
+| rational (1.0) | 0.1 | reads 99, w-dep 1 | reads 100 | reads 100 | **25** |
+| | 0.2 | reads 82, w-dep 18 | reads 65, undet 35 | reads 94, undet 6 | **40** |
+| deaf (0) | 0.1 | deaf 98, w-dep 2 | deaf 24, undet 76 | deaf 58, undet 42 | 14 |
+| | 0.2 | deaf 88, w-dep 12 | deaf 12, undet 88 | deaf 48, undet 52 | 37 |
+| unit_blind (1.0) | 0.1 | not the charge 100 | reads 100 | not the charge 100 | 25 |
+| | 0.2 | not the charge 70, w-dep 30 | reads 65, undet 35 | not the charge 93, undet 6, reads 1 | 40 |
+| own_line | 0.1 / 0.2 | no headroom 100 / 81 | undet 100 / 100 | no headroom 100 / 100 | 25 / 40 |
+| mood (0, placebo 1) | 0.1 | mood 94, w-dep 6 | deaf 42, undet 58 | deaf 63, undet 37 | 26 |
+| partial, SI 0.30 | 0.1 | w-dep 64, deaf 33, reads 3 | undet 100 | undet 93, reads 5, deaf 2 | 21 |
+| | 0.2 | w-dep 49, deaf 50, reads 1 | undet 100 | undet 95, deaf 5 | 40 |
+| partial, SI 0.15 | 0.1 | deaf 75, w-dep 25 | undet 98, deaf 2 | undet 91, deaf 9 | 26 |
+| | 0.2 | deaf 73, w-dep 27 | undet 98, deaf 2 | undet 84, deaf 16 | 46 |
+| partial 0.30, uneven over tasks | 0.1 | w-dep 69, deaf 30, reads 1 | undet 100 | undet 99, deaf 1 | 29 |
+| partial 0.15, uneven over tasks | 0.1 | deaf 75, w-dep 25 | undet 98, deaf 2 | undet 89, deaf 11 | 22 |
+| wording_split (1, 1, 0) | 0.1 | w-dep 99, reads 1 | reads 64, undet 36 | reads 95, undet 5 | 100 |
+| | 0.2 | w-dep 98, reads 2 | undet 74, reads 26 | undet 62, reads 38 | 98 |
+
+What the check says:
+- v2's readings err towards *undetermined*, as stated when it was written:
+  no agent built to read is ever called *deaf* by v2, and no deaf agent is
+  ever called *reads*. A stable agent at SI 0.30 stays *undetermined* in
+  93–100 of 100 runs, where v1 calls it *wording-dependent* in about half and
+  *deaf* in a third. That is the fault v2 was written to remove.
+- The price is power: v2 calls a deaf agent with 10% noise *deaf* in only 24
+  of 100 runs. Only a near-deterministic model (llama-3.3-70b, gemma-3-27b)
+  gets a *deaf* reading from five tasks. The fix is more tasks, as planned.
+- **The registered spread test fails its own check.** It says "wording changes
+  the size" for 14–53 of 100 agents whose wording changes nothing, because max
+  − min of three noisy SIs is biased upwards and its bootstrap interval almost
+  never reaches zero. It is reported as registered, but no conclusion below
+  rests on it. In its place, as an exploratory check added after this result:
+  the wording labels are shuffled within each task and cell (the null
+  hypothesis "the wording changes nothing"). On the same simulated agents it
+  gives p < 0.05 in 1–4 of 100 runs where the wording changes nothing, and in
+  99 (lapse 0.1) and 71 (lapse 0.2) of 100 for `wording_split`.
+
+### Series 3b and the chill
+
+| model | units gap per unit (control) w0 / w1 / w2 | 3b verdict, all wordings | chill mean w0 / w1 / w2 |
+|---|---|---|---|
+| llama-3.1-8b | +0.07 / +0.06 / +0.07 | *inconclusive* | −0.02 / +0.07 / −0.09 |
+| qwen-2.5-72b | −0.47 / +0.20 / −0.07 | *inconclusive* | +0.00 / +0.09 / −0.02 |
+| llama-3.3-70b | +0.00 / +0.00 / +0.07 | *inconclusive* | +0.00 / +0.00 / −0.02 |
+| gemma-3-27b | −0.07 / −0.11 / +0.20 | *inconclusive* | +0.00 / −0.23 / −0.35 |
+| mistral-small-3.2-24b | −0.20 / +0.00 / +0.13 | *inconclusive* | −0.02 / +0.04 / −0.09 |
+
+*Inconclusive* means the units gap did not come back under the old wording:
+there was nothing for a stated total to close. A negative chill means the
+stated total raised the bypass rate where the bypass pays.
+
+**Against the expectations** (details in `MODEL.md`, series 3c outcome): R1
+not run; R1b not held by the letter (wording-dependent, never reads); R2 not
+held (wording-dependent; reads pooled under v2); R3 falsified (deaf); R4
+falsified in its first half (deaf), held in its second (own line +0.44, +0.62
+in w1, w2); R5 falsified (deaf, 3b inconclusive); R6 not held (3 of 5 stable);
+R7 not testable under v1. Rule v2's expectations for gemma-3-27b and
+mistral-small-3.2-24b, its two real tests, are both falsified: both are deaf.
