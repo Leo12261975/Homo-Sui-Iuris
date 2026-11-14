@@ -559,11 +559,17 @@ task-bootstrap interval). *Wording changes the size* if the spread is at least
 agreeing. A model *reads* (or is *deaf*) if no wording gives the opposite
 reading and at least two give it.
 
+**Pooled level.** Next to the per-wording readings, one reading of the mean
+SI over the three wordings, with its task-bootstrap interval and the same
+three outcomes (proposed by a second outside review the same evening).
+
 **Two axes, knows and acts.** Per model and wording: does the price reach its
-own scores (SI of its own numbers ≥ 0.30), and does its choice follow its own
-scores (the chosen "do" is its own top-scored word in at least 80% of
-answers). Four cells: reads and acts; knows but does not act; acts on
-something the scores do not show; deaf.
+own scores (SI of its own numbers ≥ 0.30), and does it reach the choice (the
+v2 reading of SI is *reads*). Four cells: reads and acts; knows but does not
+act; acts on the price though its scores do not show it; deaf. How often the
+chosen "do" is its own top-scored word is reported beside the table as the
+mechanism, not used to place a model: an agent can follow its own scores and
+still be deaf (scores without the price), or ignore them and still be deaf.
 
 **Expectations under v2.** Gemma-3-27b: *reads* on at least two wordings,
 no wording reads it as *deaf*, cell "reads and acts" (R4's own line is read as
