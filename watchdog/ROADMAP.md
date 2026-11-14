@@ -270,6 +270,17 @@ proves the *logic*; it is not yet validated on a real LLM.
   an OpenAI-compatible API (OpenRouter), after the local qwen runs, so the
   findings stop being about one family. Expectations for each new model are
   written before its run.
+- **Series 3c built and registered (2026-11-14), not yet run.** Series 3 and
+  3b on five models through OpenRouter: qwen2.5-7b (quantization control
+  against the local 4-bit build), qwen2.5-72b, llama-3.3-70b, gemma-3-27b,
+  mistral-small-3.2-24b. The wording control is in: every cell runs on the
+  original prompt and two paraphrases (`wordings.py`), and a model has a
+  verdict only if all three wordings agree. The chill gets a measure
+  (`--chill`). The harness records the provider and cost of every call and
+  stops at `--max-cost`. Expectations R1–R7 in `MODEL.md`. Optional, free:
+  rerun qwen2.5:14b locally on all three wordings, since its series 3 and 3b
+  verdicts rest on one wording (R6 makes this required if two or more models
+  turn out wording-dependent).
 - **Later: the bridge between the hemispheres (Leo's image: W0Guard and the
   watchdog as two hemispheres, `trace_gap` as the corpus callosum).** Today
   they share the primitive but exchange no signals. Make them talk: a jump

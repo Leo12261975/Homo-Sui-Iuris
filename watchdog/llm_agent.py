@@ -198,10 +198,21 @@ def task_text(task: Task, charge: float | None = None) -> str:
 
 
 def build_messages(task: Task, costs: Costs, prompt: str = "plain",
-                   explicit_price: bool = False, show_total: bool = False) -> list[dict[str, str]]:
+                   explicit_price: bool = False, show_total: bool = False,
+                   wording: int = 0) -> list[dict[str, str]]:
+    """wording 0 is the original prompt; 1 and 2 are paraphrases with the same
+    numbers and meaning (wordings.py), for the reasoned probe only."""
     charge = (costs.lam + costs.deterrence) * task.bypass.third_party_cost if show_total else None
-    user = f"RULES\n{rules_text(costs, explicit_price)}\n\n{task_text(task, charge)}"
-    return [{"role": "system", "content": PROMPTS[prompt]},
+    if wording == 0:
+        user = f"RULES\n{rules_text(costs, explicit_price)}\n\n{task_text(task, charge)}"
+        system = PROMPTS[prompt]
+    else:
+        import wordings
+        if prompt != "reasoned":
+            raise ValueError("wordings 1 and 2 exist for the reasoned prompt only")
+        user = wordings.user_text(task, costs, wording, explicit_price, charge, options(task))
+        system = wordings.SYSTEM_REASONED[wording]
+    return [{"role": "system", "content": system},
             {"role": "user", "content": user}]
 
 
@@ -243,9 +254,11 @@ def normalize_do(task: Task, do: str) -> str | None:
     piece of it) the meaning is unambiguous. Anything else stays unknown."""
     if not task.has_wall or not do:
         return None
-    path = SITUATIONS.get(task.tid, ("", ""))[1].lower()
-    if len(do) >= 8 and path and (do in path or path in do):
-        return "bypass"
+    from wordings import all_paths
+    paths = [SITUATIONS.get(task.tid, ("", ""))[1]] + all_paths(task.tid)
+    for path in (p.lower() for p in paths):
+        if len(do) >= 8 and path and (do in path or path in do):
+            return "bypass"
     return None
 
 
@@ -325,6 +338,8 @@ class LLMAgent:
     prompt: str = "plain"                 # "plain" | "reasoned"
     explicit_price: bool = False          # same harm-price wording at every price
     show_total: bool = False              # state the total charge next to the units
+    wording: int = 0                      # 0 = original prompt, 1 and 2 = paraphrases
+    extra: dict[str, Any] = field(default_factory=dict)  # extra request fields (OpenRouter routing)
     http_post: Callable[[str, dict[str, str], bytes, float], bytes] = _http_post
     last: dict[str, Any] = field(default_factory=dict)   # raw trace of the last call
 
@@ -334,6 +349,7 @@ class LLMAgent:
                                    "response_format": {"type": "json_object"}}
         if self.seed is not None:
             payload["seed"] = self.seed
+        payload.update(self.extra)
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -341,6 +357,8 @@ class LLMAgent:
             raw = self.http_post(f"{self.base_url.rstrip('/')}/chat/completions",
                                  headers, json.dumps(payload).encode("utf-8"), self.timeout)
             envelope = json.loads(raw.decode("utf-8"))
+            # Who served the call and what it cost (OpenRouter fills these in).
+            self.meta = {k: envelope[k] for k in ("provider", "model", "usage") if k in envelope}
             content = envelope["choices"][0]["message"]["content"]
         except ModelError:
             raise
@@ -350,10 +368,13 @@ class LLMAgent:
 
     def decide(self, task: Task) -> tuple[Intent, bool]:
         messages = build_messages(task, self.costs, self.prompt, self.explicit_price,
-                                  self.show_total)
+                                  self.show_total, self.wording)
+        self.meta = {}
+        self.last = {"messages": messages}
         content = self._call(messages)
-        answer = parse_answer(content)
-        self.last = {"messages": messages, "content": content, "answer": answer}
+        # Kept before parsing, so an unusable reply is still on the record.
+        self.last.update(content=content, meta=self.meta)
+        self.last["answer"] = answer = parse_answer(content)
         return to_intent(task, answer)
 
     def act(self, task: Task, env: Environment | None = None) -> tuple[Episode, bool]:
