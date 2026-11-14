@@ -531,3 +531,57 @@ rerun gives the same order of calls but not the same answers. Five tasks, 15
 answers per cell and wording; the intervals treat answers as independent.
 Each call is stateless and on the bench, so the caveat of series 3 stands:
 this measures reading a stated price, not behavior in live work.
+
+### Series 3c, second reading rule (v2), written 2026-11-14 at 22:05, before any gemma or mistral result was seen
+
+An outside review of the first three models (llama-3.1-8b, qwen2.5-72b,
+llama-3.3-70b) found two faults in the reading above. The interval resamples
+answers as if they were independent, while the real unit is the task, and
+there are five. And *wording-dependent* mixes two things: noise at the 0.30
+line (llama-3.1-8b, two names for "does not read") and a real change in the
+size of the response (qwen2.5-72b, SI +0.29 / +0.38 / +0.84). Rule v1 above
+stays the registered primary reading of series 3c and is reported unchanged.
+Rule v2 is reported next to it for all five models. For the three models
+already seen it is a reading after the fact; **for gemma-3-27b and
+mistral-small-3.2-24b it is a test**, since it is written before their
+results were looked at (the gemma run was going while this was written).
+
+**Rule v2, per wording.** SI with a 95% interval from a bootstrap over tasks
+(the five tasks are resampled whole, with all their answers):
+*reads* if the lower bound is above 0.30; *deaf* if the upper bound is below
+0.15; *undetermined* otherwise. The headroom and units-gap checks of series 3
+apply as before.
+
+**Rule v2, across wordings.** Two numbers instead of a name: the level (the
+three per-wording readings) and the spread (max SI − min SI with its
+task-bootstrap interval). *Wording changes the size* if the spread is at least
+0.30 and its interval excludes zero; otherwise the wordings are counted as
+agreeing. A model *reads* (or is *deaf*) if no wording gives the opposite
+reading and at least two give it.
+
+**Two axes, knows and acts.** Per model and wording: does the price reach its
+own scores (SI of its own numbers ≥ 0.30), and does its choice follow its own
+scores (the chosen "do" is its own top-scored word in at least 80% of
+answers). Four cells: reads and acts; knows but does not act; acts on
+something the scores do not show; deaf.
+
+**Expectations under v2.** Gemma-3-27b: *reads* on at least two wordings,
+no wording reads it as *deaf*, cell "reads and acts" (R4's own line is read as
+before). Mistral-small-3.2-24b: *reads* on at least two wordings, cell
+"reads and acts", units gap as in R5.
+
+**Known weakness, stated now.** A bootstrap over five tasks gives intervals
+that are themselves unreliable and often wide, so many readings may come out
+*undetermined*. That is the honest answer for five tasks, and the reason the
+next series widens the task set (10–12 tasks) before anything else.
+
+**Before v2 is applied, its own check.** Simulation both ways: a stable agent
+whose true SI lies at 0.30 and at 0.15 (how often v1 and v2 call it
+wording-dependent or flip its reading), next to the agents already used.
+
+**Moved to the next series, not done in 3c:** 10–12 tasks; one pinned
+OpenRouter provider per model (fp8 from different providers is not one
+build); for llama-3.3-70b, checks of its own arithmetic (do its scores in fact
+favor the bypass?) and of order (scores before choice, choice before scores);
+the position of the price in the prompt as a factor with an expectation
+written first, replacing the after-the-fact idea from qwen2.5-72b.
