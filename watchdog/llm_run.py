@@ -88,10 +88,17 @@ def preflight(base_url: str, model: str, api_key: str | None, timeout: float = 1
             f"  http://localhost:11434 shows 'Ollama is running'.") from e
     ids = {m.get("id") for m in listing.get("data", []) if isinstance(m, dict)}
     if ids and model not in ids:
+        if "openrouter.ai" not in base_url:
+            raise PreflightError(
+                f"the server answers but has no model '{model}'. Available: "
+                f"{', '.join(sorted(i for i in ids if i)) or '(none)'}.\n"
+                f"  Local Ollama: ollama pull {model}")
+        # OpenRouter lists hundreds of models: show only the near names.
+        stem = model.split("/")[-1].split("-")[0].lower()
+        near = sorted(i for i in ids if i and stem and stem in i.lower())[:15]
         raise PreflightError(
-            f"the server answers but has no model '{model}'. Available: "
-            f"{', '.join(sorted(i for i in ids if i)) or '(none)'}.\n"
-            f"  Local Ollama: ollama pull {model}")
+            f"the server at {base_url} has no model '{model}'.\n"
+            f"  Similar names: {', '.join(near) or '(none)'}")
 
 
 def run(args) -> str:
