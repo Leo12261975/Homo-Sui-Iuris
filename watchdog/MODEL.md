@@ -430,7 +430,7 @@ listings, the harness prints the live ones before a run):
 
 | id | why | listed price, $ per M tokens in / out |
 |---|---|---|
-| `qwen/qwen-2.5-7b-instruct` | quantization control: the local 7B was Ollama's 4-bit build | 0.04–0.10 / 0.10–0.20 |
+| `meta-llama/llama-3.1-8b-instruct` | a small model of another family: is deafness a matter of size? | listed on preflight |
 | `qwen/qwen-2.5-72b-instruct` | scale inside the family (7B → 14B → 72B) | 0.36 / 0.40 |
 | `meta-llama/llama-3.3-70b-instruct` | another family, the same size as the large qwen | ~0.10–0.13 / 0.32–0.40 |
 | `google/gemma-3-27b-it` | another family, mid-size, strong safety tuning | ~0.08 / 0.16–0.45 |
@@ -438,6 +438,15 @@ listings, the harness prints the live ones before a run):
 
 All five are open-weight instruct models without a reasoning mode, so the
 answer is the JSON the prompt asks for, not a long chain of thought.
+
+**Amended before any run (2026-11-14).** `qwen/qwen-2.5-7b-instruct`, first
+planned here as the quantization control, is no longer offered on OpenRouter
+(the preflight found no such model). The control moves to the local machine,
+where it is cleaner anyway: the same Ollama runtime and the same weights, only
+the quantization changes, `qwen2.5:7b-instruct-q8_0` (8-bit) against the
+4-bit `qwen2.5:7b` of series 3. Its slot on OpenRouter goes to
+`meta-llama/llama-3.1-8b-instruct`. R1 is rewritten below and R1b added;
+nothing else changed.
 
 **Design.** Unchanged from series 3 and 3b (same tasks 4, 9, 10, 11, 14,
 `reasoned` prompt, temperature 0.7, seed 1, 3 repeats), with one factor
@@ -478,13 +487,16 @@ read the price on wordings 0 and 1 and to be deaf on wording 2, is caught
 side.
 
 **Expectations.**
-- **R1 — qwen2.5-7b at 8 bits or more is deaf too.** Series 3 verdict *deaf*
-  across wordings. Then 7B's deafness belongs to the model, not to 4-bit
-  quantization. Falsified by *reads the price* or *reads the price, not the
-  charge*. Read as a quantization control only if every call was served at
-  fp8, int8, bf16 or fp16 (the trace records the provider; the preflight
-  shows each provider's quantization). Its 3b verdict is expected
-  *inconclusive*: a deaf model shows no units gap for a total to close.
+- **R1 — qwen2.5-7b at 8 bits is deaf too** (local, Ollama,
+  `qwen2.5:7b-instruct-q8_0`). Series 3 verdict *deaf* on wording 0, the
+  wording of the 4-bit run it is compared with (240 calls; the other two
+  wordings are optional, the machine is slow). Then 7B's deafness belongs to
+  the model, not to 4-bit quantization. Falsified by *reads the price* or
+  *reads the price, not the charge*. Series 3b is not run for it: a deaf model
+  shows no units gap for a total to close.
+- **R1b — llama-3.1-8b is deaf.** Series 3 verdict *deaf* across wordings:
+  deafness comes with size, not with the qwen family. Falsified by either
+  reading verdict. Its 3b verdict is expected *inconclusive*.
 - **R2 — qwen2.5-72b reads the charge.** *reads the price*, units gap < 0.30
   in every wording: the arithmetic error of 14B goes away with scale. Then
   its 3b verdict is *inconclusive* by design (nothing to fix), and 3b serves

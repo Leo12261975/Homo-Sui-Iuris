@@ -383,3 +383,16 @@ def test_openrouter_check_lists_providers_and_refuses_an_impossible_filter(monke
     args.quantizations = "int4"
     with pytest.raises(PreflightError):
         openrouter_check(args, 1000)
+
+
+def test_a_missing_openrouter_model_shows_near_names_not_the_whole_catalog(monkeypatch):
+    import io
+    import urllib.request
+    from llm_run import PreflightError, preflight
+    ids = [{"id": i} for i in ("qwen/qwen-2.5-72b-instruct", "qwen/qwen3-14b", "openai/gpt-4o")]
+    monkeypatch.setattr(urllib.request, "urlopen",
+                        lambda req, timeout: io.BytesIO(json.dumps({"data": ids}).encode()))
+    with pytest.raises(PreflightError) as e:
+        preflight("https://openrouter.ai/api/v1", "qwen/qwen-2.5-7b-instruct", "k")
+    msg = str(e.value)
+    assert "qwen/qwen-2.5-72b-instruct" in msg and "gpt-4o" not in msg and "ollama" not in msg
