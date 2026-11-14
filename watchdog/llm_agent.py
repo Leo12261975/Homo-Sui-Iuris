@@ -318,10 +318,24 @@ def to_intent(task: Task, answer: dict[str, str]) -> tuple[Intent, bool]:
 
 # ─────────────────────────── The model client ───────────────────────────
 
-def _http_post(url: str, headers: dict[str, str], body: bytes, timeout: float) -> bytes:
+def _http_post(url: str, headers: dict[str, str], body: bytes, timeout: float,
+               _open=None) -> bytes:
+    """timeout bounds the whole call, not each read. A socket timeout alone is
+    not enough: while a provider is slow, OpenRouter keeps the connection alive
+    by sending blank chunks, each read returns something, and a hung call never
+    times out (it happened on 2026-11-14 at call 144 of a run)."""
+    import time
     req = urllib.request.Request(url, data=body, headers=headers, method="POST")
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return resp.read()
+    deadline = time.monotonic() + timeout
+    with (_open or urllib.request.urlopen)(req, timeout=min(timeout, 60.0)) as resp:
+        chunks = []
+        while True:
+            if time.monotonic() > deadline:
+                raise TimeoutError(f"timed out: no complete reply within {timeout:g}s")
+            piece = resp.read1(65536) if hasattr(resp, "read1") else resp.read(65536)
+            if not piece:
+                return b"".join(chunks)
+            chunks.append(piece)
 
 
 @dataclass
