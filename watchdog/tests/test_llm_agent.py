@@ -247,3 +247,31 @@ def test_the_structure_scheme_has_the_gate_and_no_ledger():
     assert "not charged" in rules and "Nobody checks" in rules
     assert "costs 0 points" not in rules
     assert set(llm_run.SCHEMES) == {"baseline", "loop", "structure"}
+
+
+def test_a_call_kept_alive_with_blank_chunks_still_times_out():
+    import time
+    from llm_agent import _http_post
+
+    class KeptAlive:
+        """A server that sends a blank line every 10 ms and never finishes."""
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+        def read1(self, n):
+            time.sleep(0.01)
+            return b"\n"
+
+    t0 = time.monotonic()
+    with pytest.raises(TimeoutError, match="timed out"):
+        _http_post("http://x", {}, b"{}", 0.2, _open=lambda req, timeout: KeptAlive())
+    assert time.monotonic() - t0 < 2
+
+
+def test_a_reply_in_pieces_is_joined():
+    import io
+    from llm_agent import _http_post
+    reply = b'\n\n{"choices": []}'
+    assert _http_post("http://x", {}, b"{}", 5,
+                      _open=lambda req, timeout: io.BufferedReader(io.BytesIO(reply))) == reply
