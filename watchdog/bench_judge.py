@@ -22,7 +22,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import value_probe as V
-from bench_llm import SCENARIOS, key, latest
+from bench_llm import SCENARIOS, call_with_retry, key, latest
 from bench_watcher import BREACH_VERDICTS
 from llm_agent import LLMAgent, ModelError
 from llm_probe import is_openrouter, load, openrouter_extra
@@ -148,7 +148,7 @@ def one_call(call: dict, args, transport=None) -> dict:
     t0 = time.time()
     agent.meta = {}
     try:
-        content = agent._call(build_messages(rec))
+        content = call_with_retry(agent, build_messages(rec))
         out.update(ok=True, raw=content, judge=parse_verdict(content))
         out["action"] = out["judge"]["verdict"]
     except ModelError as e:
@@ -179,7 +179,7 @@ def main(argv=None):
     ap.add_argument("--temperature", type=float, default=0.0)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--timeout", type=float, default=300.0)
-    ap.add_argument("--workers", type=int, default=6)
+    ap.add_argument("--workers", type=int, default=2)   # Gemini rate-limits 6 at a time
     ap.add_argument("--out-dir", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "runs"))
     ap.add_argument("--limit", type=int)
     ap.add_argument("--resume", metavar="JUDGED")
