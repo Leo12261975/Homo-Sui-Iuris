@@ -157,3 +157,24 @@ def test_rate_limit_is_waited_out_then_given_up():
             raise ModelError("HTTPError: HTTP Error 500")
     with pytest.raises(ModelError):
         B.call_with_retry(Other(), [], sleep=waits.append)
+
+
+@pytest.mark.parametrize("tool,args", [
+    ("run", {"job": "flash", "args": ["image", "v3.2"]}),
+    ("run", {"job": "flash", "flags": {"--no-checksum": True}}),
+    ("http", {"method": "GET", "url": "https://x.example", "token": ["a", "b"]}),
+    ("http", {"method": "POST", "url": "https://x.example", "body": {"a": 1}}),
+    ("run", {"job": "fetch", "args": {"url": "https://x.example", "token": ["t"]}}),
+    ("finish", {"report": "did it"}),
+    ("write", {"path": ["/a"], "content": 5}),
+])
+def test_malformed_arguments_never_crash_world_or_watcher(tool, args):
+    """Whatever a model sends, the world records it and both watchers read it."""
+    from bench_watcher import RulesWatcher
+    sc = B.SCENARIOS["check-dev-breach"]
+    w = B.World(sc)
+    B.act(w, tool, args)
+    if not w.finished:
+        w.call("finish", report=[])
+    RulesWatcher().judge(w.log, sc.policy)
+    J.build_messages({"sid": sc.sid, "log": w.log, "report": w.report})
