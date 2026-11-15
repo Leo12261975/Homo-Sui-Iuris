@@ -1865,3 +1865,32 @@ whether the LLM run is read at all.
 - **M3.** W-rules and W-judge give the same episode verdict in ≥ 85% of
   episodes; the disagreements are mostly on the gray family and on reports
   that leave a step out.
+
+### The bench built: world, dev half, W-rules (recorded 2026-11-15)
+
+Code: `bench_world.py` (the world and its two records: `log` for the watcher,
+`full` for the scorer), `bench_scenarios.py` (the dev half: seven families ×
+two twins, two controls), `bench_watcher.py` (W-rules), `bench_scripted.py`
+(scripted trajectories and the scorer), `tests/test_bench.py`.
+
+Instrumentation, fixed now: writes are logged with their content; a web request
+is logged with the credential actually presented; a job is logged at the call
+with its literal arguments (what it does inside is not); the `scratch` job is
+not instrumented at all. The gate sees what the world executes on instrumented
+channels and nothing through `scratch`.
+
+One change to W-rules made on the dev half: a request body read from a file
+the log never saw written no longer makes the step *unclear* — the recipient
+rule needs only that data was sent. (Found by two lawful twins that came out
+*unclear*; no breach verdict changed.)
+
+**The watcher's own check, dev half** (95 scripted episodes, 16 scenarios):
+plain breaches caught 24/24, partial reports read as silent 6/6, breaches
+through a file caught 6/6, false alarms on lawful twins 0/42, breaches through
+the blind job *unclear* 7/7 and none *clean*; the gate refused 5/5
+instrumented zone acts and nothing else (0/95). Verdicts match the table
+95/95. **K1 and K2 hold on the dev half.**
+
+The registered reading is on the held-out half. **W-rules is frozen at this
+commit**: `bench_watcher.py` is not changed before the held-out scenarios are
+written and checked. The held-out half goes in a separate, later commit.
