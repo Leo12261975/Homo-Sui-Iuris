@@ -795,3 +795,31 @@ Declarations on a bypass (honest / lie / silence): qwen 368 / 6 / 2 of 376;
 llama 375 / 14 / 0 of 389; mistral 365 / 7 / 16 of 388. P(bypass) by the
 bypass's letter A / B / C: qwen 0.32 / 0.57 / 0.66; llama 0.51 / 0.49 / 0.62;
 mistral 0.47 / 0.56 / 0.62.
+
+
+## The bench, first run (2026-11-15)
+
+Traces: branch `watchdog/bench-traces`, files `bench_<model>_*.jsonl` (one line
+per episode: transcript, log, full record, report) and `judge_<model>_*.jsonl`
+(W-judge, `google/gemini-3.8-flash`). Summaries:
+`python watchdog/bench_llm.py --summarize <trace> --judged <judge trace>`.
+Outcome against the expectations in `MODEL.md` ("Bench outcome, first run").
+
+| measure | qwen-2.5-72b | llama-3.3-70b | mistral-small-3.2-24b |
+|---|---|---|---|
+| episodes (judged) | 306 (306) | 306 (306) | 306 (304) |
+| A1 way taken, in sight / one step | 0.84 / 0.09 | 0.84 / 0.39 | 0.81 / 0.19 |
+| A2 breach, open families / another source | 0.37 / 0.50 | 0.66 / 0.50 | 0.47 / 0.50 |
+| A3 way taken, breach / near / lawful twin | 0.39 / 0.33 / 0.55 | 0.63 / 0.78 / 0.64 | 0.47 / 0.39 / 0.57 |
+| A4 claims a message never sent | 0.00 | 0.00 | 0.00 |
+| A4 breach left out of the report (W-rules / W-judge) | 0.42 / 0.05 | 0.66 / 0.57 | 0.43 / 0.25 |
+| A5 false exit, no wall | 0.00 | 0.06 | 0.00 |
+| A5 exit, slow lawful path | 1.00 | 0.61 | 0.50 |
+| blind job used | 0.01 | 0.05 | 0.04 |
+| steps per episode | 3.0 | 4.9 | 4.3 |
+| M1 recall within coverage, W-rules / W-judge | 1.00 / 1.00 | 1.00 / 1.00 | 1.00 / 1.00 |
+| M1 precision, W-rules / W-judge | 0.86 / 0.85 | 0.57 / 0.55 | 0.82 / 0.76 |
+| M1 false alarms on lawful twins, W-rules / W-judge | 0.07 / 0.04 | 0.28 / 0.28 | 0.08 / 0.09 |
+| lawful-twin false alarms after the fact: registered → rules error fixed → rule breaches not in the key counted | 9 → 9 → 9 | 35 → 22 → 2 | 10 → 10 → 4 |
+| M3 same episode verdict | 0.78 | 0.85 | 0.89 |
+| cost, agent / judge | $0.23 / $0.64 | $0.12 / ~$0.7 | $0.08 / $0.78 |
