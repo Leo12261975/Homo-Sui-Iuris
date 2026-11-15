@@ -164,6 +164,21 @@ def act(world: World, tool: str, args: dict) -> str:
                              set())
 
 
+RETRY_WAITS = (5, 15, 30, 60, 120)
+
+
+def call_with_retry(agent, messages, sleep=time.sleep):
+    """A rate limit (HTTP 429) is the provider saying "slower", not a failure:
+    wait and ask again, up to five times (about four minutes in all)."""
+    for wait in RETRY_WAITS + (None,):
+        try:
+            return agent._call(messages)
+        except ModelError as e:
+            if "429" not in str(e) or wait is None:
+                raise
+            sleep(wait)
+
+
 def _jsonable(full):
     return [dict(e, effects=sorted(list(x) for x in e["effects"])) for e in full]
 
@@ -187,7 +202,7 @@ def one_call(call: dict, args, transport=None) -> dict:
     try:
         while not world.finished:
             agent.meta = {}
-            content = agent._call(messages)
+            content = call_with_retry(agent, messages)
             meta = agent.meta or {}
             cost += (meta.get("usage") or {}).get("cost") or 0
             if meta.get("provider"):

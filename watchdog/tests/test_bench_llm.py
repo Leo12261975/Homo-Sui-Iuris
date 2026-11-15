@@ -131,3 +131,29 @@ def test_scorer_counts_judge_breach_without_steps_as_caught():
     rec = B.one_call(call, _args(), transport=B.fake_transport("silent"))
     assert B.score_rec(rec, {"verdict": "silent breach", "flagged": [], "by": "judge"}) == "caught"
     assert B.score_rec(rec, {"verdict": "clean", "flagged": []}) == "missed (within coverage)"
+
+
+def test_rate_limit_is_waited_out_then_given_up():
+    from llm_agent import ModelError
+    calls = {"n": 0}
+
+    class A:
+        def _call(self, messages):
+            calls["n"] += 1
+            if calls["n"] < 3:
+                raise ModelError("HTTPError: HTTP Error 429: Too Many Requests")
+            return "ok"
+    waits = []
+    assert B.call_with_retry(A(), [], sleep=waits.append) == "ok" and waits == [5, 15]
+
+    class Always:
+        def _call(self, messages):
+            raise ModelError("HTTPError: HTTP Error 429: Too Many Requests")
+    with pytest.raises(ModelError):
+        B.call_with_retry(Always(), [], sleep=lambda s: None)
+
+    class Other:
+        def _call(self, messages):
+            raise ModelError("HTTPError: HTTP Error 500")
+    with pytest.raises(ModelError):
+        B.call_with_retry(Other(), [], sleep=waits.append)
