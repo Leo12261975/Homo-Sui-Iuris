@@ -177,7 +177,8 @@ def one_call(call: dict, args, transport=None) -> dict:
                      temperature=args.temperature, seed=args.seed + call["repeat"],
                      timeout=args.timeout, prompt=PROMPT, explicit_price=True,
                      show_total=call.get("show_total", False), wording=call.get("wording", 0),
-                     extra=getattr(args, "extra", None) or {})
+                     extra=getattr(args, "extra", None) or {},
+                     menu="old")      # series 3: the menu it ran with
     if transport:
         agent.http_post = transport
     rec = dict(call, charge=call["price"] * call["harm"], model=args.model,

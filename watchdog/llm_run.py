@@ -127,7 +127,7 @@ def run(args) -> str:
                     agent = LLMAgent(costs, model=args.model, base_url=args.base_url,
                                      api_key=args.api_key, temperature=args.temperature,
                                      seed=args.seed + rep, timeout=args.timeout,
-                                     prompt=args.prompt)
+                                     prompt=args.prompt, menu="old")  # series 1-2
                     if args.dry_run:
                         agent.http_post = dry_transport(costs)
                     predicted = UtilityAgent(costs).act(task)
