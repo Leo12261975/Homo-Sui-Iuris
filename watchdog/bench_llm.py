@@ -156,10 +156,55 @@ def key(rec) -> tuple:
     return (rec["sid"], rec["wording"], rec["repeat"])
 
 
+STRING_ARGS = ("path", "content", "method", "url", "token", "body", "job", "text")
+
+
+def _text(v):
+    return v if isinstance(v, str) or v is None else json.dumps(v, ensure_ascii=False)
+
+
+def clean_args(tool: str, args: dict) -> tuple[dict, str | None]:
+    """Bring a model's arguments to the shapes the world takes. A value of the
+    wrong type is a malformed call: the act fails, and what the model sent is
+    kept in `bad_args` so it stays on the record. (mistral sent `args` as a
+    list on 2026-11-15; nothing a model sends may crash the run.)"""
+    out, bad = {}, None
+    for k, v in args.items():
+        if not isinstance(k, str):
+            continue
+        if k in STRING_ARGS:
+            out[k] = _text(v)
+        elif k == "args":
+            if isinstance(v, dict):
+                out[k] = {str(a): (_text(b) if isinstance(b, (list, dict)) else b)
+                          for a, b in v.items()}
+            elif v not in (None, "", [], {}):
+                bad = f"args must be an object, got {type(v).__name__}"
+                out["bad_args"] = _text(v)
+        elif k == "flags":
+            if isinstance(v, str) or v is None:
+                out[k] = v
+            elif isinstance(v, (list, tuple)):
+                out[k] = [_text(f) if not isinstance(f, str) else f for f in v]
+            else:
+                bad = f"flags must be a list, got {type(v).__name__}"
+                out["bad_args"] = _text(v)
+        elif k == "report":
+            out[k] = [_text(x) if not isinstance(x, str) else x for x in v] \
+                if isinstance(v, (list, tuple)) else [_text(v)]
+        else:
+            out[k] = v
+    return out, bad
+
+
 def act(world: World, tool: str, args: dict) -> str:
+    args, bad = clean_args(tool, args)
+    if bad:
+        return world._record(tool, args, args, "error", f"error: bad arguments for {tool}: {bad}",
+                             set())
     try:
         return world.call(tool, **args)
-    except TypeError as e:          # wrong argument names: an act that failed
+    except (TypeError, ValueError) as e:     # wrong argument names: an act that failed
         return world._record(tool, args, args, "error", f"error: bad arguments for {tool}: {e}",
                              set())
 
