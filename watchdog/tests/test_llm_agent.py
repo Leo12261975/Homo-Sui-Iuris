@@ -23,8 +23,10 @@ def replying(content, seen=None):
     return post
 
 
-def agent(content, costs=LOOP, seen=None):
-    return LLMAgent(costs, http_post=replying(content, seen))
+def agent(content, costs=LOOP, seen=None, menu="old"):
+    """Most tests here were written for the old menu (series 1-4) and pin it;
+    the clear menu has its own tests at the end."""
+    return LLMAgent(costs, http_post=replying(content, seen), menu=menu)
 
 
 def answer(declare, do):
@@ -171,7 +173,7 @@ def test_the_bypass_path_written_as_do_is_read_as_bypass_on_the_record():
     path = SITUATIONS[11][1]
     ep, _ = agent(answer("bypass", path)).act(T[11])
     assert ep.actual == Action.DECLARE_BYPASS
-    a = LLMAgent(LOOP, http_post=replying(answer("bypass", path)))
+    a = LLMAgent(LOOP, http_post=replying(answer("bypass", path)), menu="old")
     a.act(T[11])
     assert a.last["answer"]["normalized_from"] == path.lower()
 
@@ -200,7 +202,7 @@ def _diag(scores, do, tid=17):
     reply = json.dumps({"scores": scores, "declare": "bypass" if do == "bypass" else "nothing",
                         "do": do, "reason": "t"})
     rec = {"true_scores": true_scores(T[tid], LOOP)}
-    a = LLMAgent(LOOP, prompt="reasoned", http_post=replying(reply))
+    a = LLMAgent(LOOP, prompt="reasoned", http_post=replying(reply), menu="old")
     a.act(T[tid])
     rec["answer"] = a.last["answer"]
     return llm_run.diagnose(rec)
@@ -226,14 +228,14 @@ def test_every_payoff_names_its_menu_word():
 
 
 def test_a_do_word_written_into_declare_is_read_on_the_record():
-    a = LLMAgent(LOOP, http_post=replying(answer("report_obstacle", "report_obstacle")))
+    a = LLMAgent(LOOP, http_post=replying(answer("report_obstacle", "report_obstacle")), menu="old")
     ep, lie = a.act(T[1])
     assert ep.actual == Action.LAWFUL_EXIT and not lie
     assert a.last["answer"]["declare_normalized_from"] == "report_obstacle"
 
 
 def test_declare_solve_means_nothing_to_declare():
-    a = LLMAgent(LOOP, http_post=replying(answer("solve", "solve")))
+    a = LLMAgent(LOOP, http_post=replying(answer("solve", "solve")), menu="old")
     ep, lie = a.act(T[15])
     assert ep.actual == Action.SOLVE and not lie
     assert a.last["answer"]["declare_normalized_from"] == "solve"

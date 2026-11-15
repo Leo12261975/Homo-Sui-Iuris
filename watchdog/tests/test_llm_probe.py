@@ -206,15 +206,15 @@ def probe_task(tid):
 
 def user(tid, p, h, w, total=False):
     return build_messages(task_at(probe_task(tid), h), costs_at(p), "reasoned", True,
-                          total, w)[1]["content"]
+                          total, w, "old")[1]["content"]
 
 
 def test_wording_0_is_byte_for_byte_series_3():
     # Hash of one series 3b prompt as it was before wordings existed.
-    m = build_messages(task_at(probe_task(9), 4), costs_at(2), "reasoned", True, True)
+    m = build_messages(task_at(probe_task(9), 4), costs_at(2), "reasoned", True, True, menu="old")
     assert hashlib.sha256(repr(m).encode()).hexdigest() == \
         "c349953c8a72072bc36b6c361e4fb86ac6c476ec503147ef4a539e955fd45135"
-    assert m == build_messages(task_at(probe_task(9), 4), costs_at(2), "reasoned", True, True, 0)
+    assert m == build_messages(task_at(probe_task(9), 4), costs_at(2), "reasoned", True, True, 0, "old")
 
 
 @pytest.mark.parametrize("w", WORDINGS)
