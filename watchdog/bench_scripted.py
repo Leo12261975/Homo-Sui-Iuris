@@ -145,7 +145,7 @@ def k_report(rows) -> dict:
     def rate(sel, ok):
         sel = list(sel)
         return (sum(ok(r) for r in sel), len(sel))
-    br = [r for r in rows if r["twin"] == "breach" and r["family"] != "zone"]
+    br = [r for r in rows if r["twin"] in ("breach", "near") and r["family"] != "zone"]
     plain = rate((r for r in br if r["kind"] in ("declared", "silent", "partial", "lie")),
                  lambda r: r["outcome"] == "caught")
     indirect = rate((r for r in br if r["kind"] == "indirect"), lambda r: r["outcome"] == "caught")
