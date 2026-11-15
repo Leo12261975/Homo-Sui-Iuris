@@ -436,12 +436,21 @@ def one_call(call: dict, args, transport=None) -> dict:
 
 
 def run(args) -> str:
+    return run_calls(args, plan(args.seed), key, one_call, "probe4",
+                     lambda: fake_transport(args.simulate, random.Random(args.seed), args.lapse),
+                     lambda c: f"{c['arm'][:3]} w{c['wording']} {c['brief']:5} {c['target']:6} "
+                               f"S={c['sev']} #{c['tid']:<2}")
+
+
+def run_calls(args, calls, keyf, callf, prefix, make_fake, describe) -> str:
+    """The run loop shared by series 4 and 5: a shuffled plan, several calls in
+    flight, a trace line per call, --resume, --limit and --max-cost."""
     done = {}
     if args.resume:
         path = args.resume
         for rec in load(path):
             if rec.get("ok"):
-                done[key(rec)] = rec
+                done[keyf(rec)] = rec
         meta = next(iter(done.values()), None)
         if meta:
             args.model, args.seed = meta["model"], meta["seed"] - meta["repeat"]
@@ -450,26 +459,24 @@ def run(args) -> str:
         os.makedirs(args.out_dir, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         tag = f"sim_{args.simulate}" if args.simulate else args.model.replace(":", "_").replace("/", "_")
-        path = os.path.join(args.out_dir, f"probe4_{tag}_{stamp}.jsonl")
+        path = os.path.join(args.out_dir, f"{prefix}_{tag}_{stamp}.jsonl")
 
     transport = None
     if args.simulate:
-        transport = fake_transport(args.simulate, random.Random(args.seed), args.lapse)
+        transport = make_fake()
     elif not args.no_preflight:
         preflight(args.base_url, args.model, args.api_key)
 
-    calls = plan(args.seed)
-    todo = [c for c in calls if key(c) not in done]
+    todo = [c for c in calls if keyf(c) not in done]
     if args.limit:
         todo = todo[:args.limit]
-    print(f"model {args.simulate or args.model}, series 4: {len(calls)} calls, {len(todo)} to do, "
+    print(f"model {args.simulate or args.model}, {prefix}: {len(calls)} calls, {len(todo)} to do, "
           f"{args.workers} at a time\ntrace -> {path}\n")
     if not args.simulate and is_openrouter(args.base_url) and not args.no_preflight:
         openrouter_check(args, len(todo))
 
     spent = sum(r.get("cost") or 0 for r in done.values())
     failures, n, stop = 0, 0, None
-    lock = threading.Lock()
     # Answered calls are carried over; a failed line is dropped and made again.
     with open(path, "w", encoding="utf-8") as fh:
         for rec in done.values():
@@ -481,24 +488,22 @@ def run(args) -> str:
             def submit_next():
                 c = next(it, None)
                 if c is not None and stop is None:
-                    futures[pool.submit(one_call, c, args, transport)] = c
+                    futures[pool.submit(callf, c, args, transport)] = c
             for _ in range(args.workers):
                 submit_next()
             while futures:
                 fut = next(as_completed(futures))
                 call = futures.pop(fut)
                 rec = fut.result()
-                with lock:
-                    fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
-                    fh.flush()
-                    n += 1
-                    spent += rec.get("cost") or 0
-                    is_transport = not rec["ok"] and any(k in rec["error"] for k in TRANSPORT_ERRORS)
-                    failures = failures + 1 if is_transport else 0
+                fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+                fh.flush()
+                n += 1
+                spent += rec.get("cost") or 0
+                is_transport = not rec["ok"] and any(k in rec["error"] for k in TRANSPORT_ERRORS)
+                failures = failures + 1 if is_transport else 0
                 if not args.simulate:
                     money = f"  ${spent:.4f}" if "cost" in rec else ""
-                    print(f"  [{n:4}/{len(todo)}] {call['arm'][:3]} w{call['wording']} {call['brief']:5} "
-                          f"{call['target']:6} S={call['sev']} #{call['tid']:<2} "
+                    print(f"  [{n:4}/{len(todo)}] {describe(call)} "
                           f"{rec.get('action', rec.get('error', ''))[:28]:28} {rec['seconds']:6.1f}s{money}")
                 if failures >= STOP_AFTER and stop is None:
                     stop = (f"\n  stopped: {STOP_AFTER} calls in a row could not reach the server.\n"
