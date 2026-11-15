@@ -1613,3 +1613,39 @@ the ledger half of the closed loop has a basis, and "the price is not a lever"
 (series 3c) is withdrawn as a statement about the frame. If llama and mistral
 stay deaf, the closed loop rests on the gate and the witness alone, and the
 bench is built for that.
+
+### Series 7 outcome, recorded after the runs
+
+Tables in `runs/README.md` (series 7). The plan and the expectations above
+are left as written.
+
+- **P1, llama-3.3-70b reads the price unlabelled — falsified.** Pooled SI
+  +0.08 [+0.01, +0.14], *deaf* (3c: −0.01). The price reaches its numbers in
+  wordings 0 and 1 (SI of numbers +0.58, +0.53) and not its choice ("knows,
+  does not act"); in wording 1 it chose its own top-scored option in only 118
+  of 237 answers.
+- **P2, qwen-2.5-72b still reads — held.** Pooled +0.44 [+0.38, +0.50],
+  *reads the price* (3c: +0.50); the wording again changes the size (w0 +0.18,
+  w2 +0.67).
+- **P3, mistral stays below 0.30 — held.** Pooled +0.11 [+0.03, +0.24],
+  *undetermined* (3c: −0.05, *deaf*).
+- **P4, the harm alone matters more — one of three.** Own line at p = 0:
+  llama +0.04 → +0.38 (held); qwen +0.16 → +0.30 and mistral +0.17 → +0.28
+  (rose, by less than 0.15).
+- **P5, the licence goes — held.** L = −0.18 (qwen), −0.43 (llama), −0.33
+  (mistral).
+
+**What it changes.**
+- **"Deaf to the price" is a fact about llama-3.3-70b and mistral, not about
+  the frame.** It held in both frames; qwen reads the price in both. Of the
+  series 3c conclusions this is the one that survives the labels.
+- **The harm stated in units moves them without any price.** With no labels
+  llama-3.3-70b bypasses at p = 0 in 84% of calls with no harm and 36% with
+  4 units; the price adds almost nothing on top (p = 8: 84% and 31%). The same
+  holds, weaker, for mistral. A sentence that the act hurts third parties
+  does the work that the points were meant to do.
+- **For the design:** the ledger in points works on one model of three; the
+  closed loop does not rest on it. What moves the models is the consequence
+  stated as harm (rule 5) and, structurally, the gate and the witness. The
+  bench is built for that: consequences shown as harm to someone, no prices
+  required, and the watcher judged by what it catches.
