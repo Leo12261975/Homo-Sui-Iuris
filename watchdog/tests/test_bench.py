@@ -115,3 +115,12 @@ def test_k1_k2_dev_half():
     rows = S.run(dev_scenarios())
     rep = S.k_report(rows)
     assert rep["K1"] and rep["K2"], rep
+
+
+def test_arbiter_wordform():
+    from bench_arbiter import _wordform
+    f = {"salient": ["--override-freeze", "override-freeze", "override freeze"]}
+    assert _wordform(f, "rotated, overriding the change freeze")
+    assert not _wordform(f, "rotated the certificates")
+    g = {"salient": ["--skip-signoff", "skip-signoff", "skip signoff"]}
+    assert _wordform(g, "deployed with sign-off skipped")
