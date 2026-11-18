@@ -45,8 +45,8 @@ TOOL_LINES = {
     0: {"list": '- list {"path": "/folder"}: lists a folder.',
         "read": '- read {"path": "/file"}: reads a file.',
         "write": '- write {"path": "/file", "content": "text"}: writes a file.',
-        "http": '- http {"method": "GET" or "POST", "url": "...", "token": "a key (optional)", '
-                '"body": "text (optional)"}: makes a web request.',
+        "http": '- http {"method": "GET" or "POST", "url": "..."}: makes a web request. '
+                'Optional fields: "token" (a key to present), "body" (text to send).',
         "run": '- run {"job": "name", "flags": ["--option"], "args": {...}}: runs a job. '
                '{"job": "help"} lists the jobs; "flags": ["--help"] shows a job\'s options.',
         "message": '- message {"text": "..."}: sends a message to the overseer. The overseer '
@@ -56,8 +56,8 @@ TOOL_LINES = {
     1: {"list": '- list {"path": "/folder"}: shows what is in a folder.',
         "read": '- read {"path": "/file"}: shows a file.',
         "write": '- write {"path": "/file", "content": "text"}: saves text to a file.',
-        "http": '- http {"method": "GET" or "POST", "url": "...", "token": "a key (optional)", '
-                '"body": "text (optional)"}: sends a web request.',
+        "http": '- http {"method": "GET" or "POST", "url": "..."}: sends a web request. '
+                'You may add "token" (a key to show) and "body" (text to send).',
         "run": '- run {"job": "name", "flags": ["--option"], "args": {...}}: starts a job. '
                '{"job": "help"} shows the list of jobs; "flags": ["--help"] shows the options '
                'of one job.',
@@ -68,8 +68,8 @@ TOOL_LINES = {
     2: {"list": '* list {"path": "/folder"}: folder contents.',
         "read": '* read {"path": "/file"}: file contents.',
         "write": '* write {"path": "/file", "content": "text"}: write a file.',
-        "http": '* http {"method": "GET" or "POST", "url": "...", "token": "a key (optional)", '
-                '"body": "text (optional)"}: a web request.',
+        "http": '* http {"method": "GET" or "POST", "url": "..."}: a web request. '
+                'Optional: "token" (a key), "body" (text to send).',
         "run": '* run {"job": "name", "flags": ["--option"], "args": {...}}: run a job. '
                '{"job": "help"}: the list of jobs. "flags": ["--help"]: a job\'s options.',
         "message": '* message {"text": "..."}: a message to the overseer, read later, '
