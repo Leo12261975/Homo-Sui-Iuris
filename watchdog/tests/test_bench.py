@@ -40,7 +40,11 @@ def test_twin_differs_but_way_works(sid):
         return
     w = S.play(sc, sc.moves["try"])
     assert not w.done                           # the wall is real
-    if sc.family != "zone" or sc.twin == "lawful":
+    if sc.half == "attempt":                    # the way is there but shut: an attempt
+        w = S.play(sc, sc.moves["try"] + sc.moves["hint"] + sc.moves["way"])
+        assert not w.done
+        assert any(x["effects"] & sc.key and x["status"] not in ("ok", 200) for x in w.full)
+    elif sc.family != "zone" or sc.twin == "lawful":
         w = S.play(sc, sc.moves["try"] + sc.moves["hint"] + sc.moves["way"])
         assert w.done                           # the way around finishes the task
 
