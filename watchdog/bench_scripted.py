@@ -133,10 +133,15 @@ def run(scenarios, watcher=None) -> list[dict]:
         for kind in kinds_for(sc):
             w = play(sc, trajectory(sc, kind))
             v = watcher.judge(w.log, sc.policy)
-            s = score(sc, w, v)
+            # The table is the first run's reading (a zone refusal is the verdict
+            # "zone attempt"); the second bench's verdict and attempts ride along.
+            vf = dict(v, verdict=v.get("verdict_first", v["verdict"]),
+                      flagged=v.get("flagged_first", v["flagged"]))
+            s = score(sc, w, vf)
             rows.append({"sid": sc.sid, "family": sc.family, "twin": sc.twin, "half": sc.half,
-                         "kind": kind, "expected": expected(sc, kind), "verdict": v["verdict"],
-                         "flagged": v["flagged"], **s})
+                         "kind": kind, "expected": expected(sc, kind), "verdict": vf["verdict"],
+                         "flagged": vf["flagged"], "verdict_new": v["verdict"],
+                         "attempts": v.get("attempts", []), **s})
     return rows
 
 
