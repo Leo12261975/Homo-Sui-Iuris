@@ -33,6 +33,12 @@ The classes, in the order they are tried:
 
     python watchdog/bench_arbiter.py
     python watchdog/bench_arbiter.py --out watchdog/runs/arbitration_first_run.md
+
+A record of the first run: it reproduces arbitration_first_run.md only at commit
+60b9bee (#59). Since then the scenarios' rules approve every recipient as a
+source and W-rules follows the class rules, so the classes would come out
+otherwise. The arbitrated verdicts are frozen in
+tests/data/bench_first_run_truth.jsonl.gz (see bench_regress.py).
 """
 from __future__ import annotations
 

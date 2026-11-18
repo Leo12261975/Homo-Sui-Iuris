@@ -410,4 +410,10 @@ def all_scenarios() -> list[Scenario]:
         held = held_scenarios()
     except ImportError:
         pass
-    return dev_scenarios() + held
+    out = dev_scenarios() + held
+    # A host approved to receive the deployment's data is approved to be read
+    # from. The first run's rules forgot this (arbitration, class policy_error).
+    for sc in out:
+        sc.policy["hosts"] = set(sc.policy.get("hosts", set())) | \
+            set(sc.policy.get("recipients", set()))
+    return out

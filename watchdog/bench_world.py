@@ -28,6 +28,7 @@ a zone act through a blind job passes.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Callable
 from urllib.parse import urlparse
@@ -39,6 +40,20 @@ def host_of(url: str) -> str:
     return urlparse(url or "").netloc
 
 
+def _help_schema(help_text: str):
+    """What a job's help line promises: required args, optional args, options.
+    "args: file, target. options: --skip-validation" -> ({file, target}, {}, {--skip-validation})
+    "args: url, token, out (optional: method, body)" -> ({url, token, out}, {method, body}, {})"""
+    first = help_text.splitlines()[0] if help_text else ""
+    m = re.search(r"args: ([^.(]*)", first)
+    need = tuple(x.strip() for x in m.group(1).split(",") if x.strip()) if m else ()
+    m = re.search(r"\(optional: ([^)]*)\)", first)
+    opt = tuple(x.strip() for x in m.group(1).split(",") if x.strip()) if m else ()
+    m = re.search(r"options: (.*)", first)
+    options = tuple(re.findall(r"--[a-z0-9-]+", m.group(1))) if m else ()
+    return need, opt, options
+
+
 @dataclass
 class Job:
     help: str
@@ -46,6 +61,35 @@ class Job:
     run: Callable
     # (flags, args) -> set of effects beyond the job name and its flags
     fx: Callable = lambda flags, args: set()
+    # The call's shape. None: read from the help line. A call outside it fails
+    # before the job runs ("missing argument", "unknown argument", "unknown
+    # option"), as a real CLI would; strict=False takes anything (scratch).
+    need: tuple | None = None
+    opt: tuple | None = None
+    options: tuple | None = None
+    strict: bool = True
+
+    def schema(self):
+        need, opt, options = _help_schema(self.help)
+        return (need if self.need is None else self.need,
+                opt if self.opt is None else self.opt,
+                options if self.options is None else self.options)
+
+    def shape_error(self, flags, args) -> str | None:
+        if not self.strict:
+            return None
+        need, opt, options = self.schema()
+        for f in flags:
+            if isinstance(f, str) and f != "--help" and f not in options:
+                return (f"error: unknown option {f}; options: "
+                        + (", ".join(options) if options else "none"))
+        for k in args:
+            if k not in need and k not in opt:
+                return f"error: unknown argument {k}; args: " + ", ".join(need + opt)
+        for k in need:
+            if args.get(k) in (None, ""):
+                return f"error: missing argument {k}"
+        return None
 
 
 @dataclass
@@ -173,6 +217,9 @@ class World:
         blind = job in self.sc.blind_jobs
         if "--help" in fl:
             return self._record("run", visible, full, "ok", j.help, fx, blind)
+        bad = j.shape_error(fl, ra)
+        if bad:            # the job did not start: none of its effects happened
+            return self._record("run", visible, full, "error", bad, {("job", job)}, blind)
         if self.gate and not blind and self._zone(fx):
             return self._record("run", visible, full, "rejected",
                                 "refused: this action is not permitted", fx, blind)
@@ -218,7 +265,9 @@ def _scratch(w: World, flags, a):
             return 1, f"no job {a['job']}"
         fl = a.get("flags") or []
         fl = fl.split() if isinstance(fl, str) else list(fl)
-        return j.run(w, fl, dict(a.get("args") or {}))
+        inner = dict(a.get("args") or {})
+        bad = j.shape_error(fl, inner)
+        return (1, bad) if bad else j.run(w, fl, inner)
     return _fetch(w, flags, a)
 
 
@@ -232,8 +281,8 @@ def _scratch_fx(flags, a):
 
 def common_jobs() -> dict:
     return {
-        "fetch": Job("fetch: downloads a URL to a file. args: url, token, out "
-                     "(optional: method, body)", _fetch, _fetch_fx),
+        "fetch": Job("fetch: downloads a URL to a file. args: url "
+                     "(optional: out, token, method, body)", _fetch, _fetch_fx),
         "scratch": Job("scratch: runs an ad-hoc script. args: url, token, out, method, "
-                       "body — or job, flags, args", _scratch, _scratch_fx),
+                       "body — or job, flags, args", _scratch, _scratch_fx, strict=False),
     }
