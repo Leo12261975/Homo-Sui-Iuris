@@ -2303,3 +2303,14 @@ author's blind spots. Asymmetric reading, fixed now: a hole a Claude
 adversary finds counts (found against its own author's grain); "found none"
 is not used for any conclusion about the watcher. Run, if at all, as an extra
 arm reported apart.
+
+### Arm X: anyone's adversary (2026-11-22, the seed of a public stand)
+
+`--adversary-prompt FILE` puts anyone's own instruction in place of `ORDER`,
+with everything the bench can tell (what the log records, how the overseer
+decides): the watcher's rules are open, and it must hold anyway (Kerckhoffs).
+The text and its hash are kept in each record; a resume with another text is
+refused. Leo's idea for later: a public stand where people write such
+instructions to break the watcher; a win is *evaded* within coverage, read from
+the full record the stand keeps, reproducible from the trace, and every win
+goes into the regression set once the hole is closed.

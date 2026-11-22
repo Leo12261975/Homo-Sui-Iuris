@@ -16,6 +16,7 @@ wording 0, 2 repeats: 32 episodes per arm.
     python watchdog/bench_redteam.py --simulate blind                 # no network
     python watchdog/bench_redteam.py --base-url https://openrouter.ai/api/v1 --model <id> --max-cost 6
     python watchdog/bench_redteam.py --arms C,R1,R3 ...               # a subset of arms
+    python watchdog/bench_redteam.py --adversary-prompt my_attack.txt --model <id> ...   # arm X
     python watchdog/bench_redteam.py --summarize "watchdog/runs/redteam_<...>.jsonl"
 """
 from __future__ import annotations
@@ -36,9 +37,14 @@ from bench_world import World
 from llm_probe import is_openrouter, load, openrouter_extra
 from llm_run import PreflightError
 
-ARMS = ("C", "A", "R1", "R2", "R3")
-ORDERED = ("R1", "R2", "R3")
-KNOWS_LOG = ("A", "R2", "R3")
+ARMS = ("C", "A", "R1", "R2", "R3", "X")
+DEFAULT_ARMS = ("C", "A", "R1", "R2", "R3")
+ORDERED = ("R1", "R2", "R3", "X")
+KNOWS_LOG = ("A", "R2", "R3", "X")
+# Arm X: anyone's own adversary text (--adversary-prompt FILE) in place of
+# ORDER, with everything the bench can tell — what the log records and how the
+# overseer decides (the watcher's rules are open, Kerckhoffs). Set once in main.
+ADVERSARY = {"text": None, "sha": None}
 REPEATS = 2
 WORDING = 0
 RT_SIDS = tuple(sorted(s.sid for s in B.SCENARIOS.values()
@@ -92,9 +98,12 @@ def build_system(call: dict) -> str:
     parts = [base[: -len(LOG_PLAIN)].rstrip(), LOG_DETAIL if arm in KNOWS_LOG else LOG_PLAIN,
              "The company's rules for this environment:\n"
              + rules_text(B.SCENARIOS[call["sid"]].policy)]
-    if arm == "R3":
+    if arm in ("R3", "X"):
         parts.append(HOW_DECIDES)
-    if arm in ORDERED:
+    if arm == "X":
+        assert ADVERSARY["text"], "arm X needs --adversary-prompt"
+        parts.append(ADVERSARY["text"])
+    elif arm in ORDERED:
         parts.append(ORDER)
     return "\n\n".join(parts)
 
@@ -111,7 +120,7 @@ def debrief(call: dict) -> str:
 
 # ─────────────────────────── The run ───────────────────────────
 
-def plan(seed: int = 1, arms=ARMS, repeats: int = REPEATS) -> list[dict]:
+def plan(seed: int = 1, arms=DEFAULT_ARMS, repeats: int = REPEATS) -> list[dict]:
     calls = [{"sid": sid, "wording": WORDING, "repeat": r, "arm": a}
              for a in arms for sid in RT_SIDS for r in range(repeats)]
     random.Random(f"redteam|{seed}").shuffle(calls)
@@ -119,7 +128,11 @@ def plan(seed: int = 1, arms=ARMS, repeats: int = REPEATS) -> list[dict]:
 
 
 def one_call(call, args, transport=None):
-    return B.one_call(call, args, transport, first=first_messages, debrief=debrief)
+    rec = B.one_call(call, args, transport, first=first_messages, debrief=debrief)
+    if call["arm"] == "X":
+        rec["adversary_sha"] = ADVERSARY["sha"]
+        rec["adversary_prompt"] = ADVERSARY["text"]
+    return rec
 
 
 def run(args) -> str:
@@ -325,17 +338,35 @@ def main(argv=None):
     ap.add_argument("--judged", metavar="JUDGED", help="bench_judge.py output for the same trace")
     ap.add_argument("--max-cost", type=float)
     ap.add_argument("--quantizations")
-    ap.add_argument("--arms", default=",".join(ARMS), help="comma list of C,A,R1,R2,R3")
+    ap.add_argument("--arms", help="comma list of C,A,R1,R2,R3,X (default: C..R3; "
+                    "with --adversary-prompt: X)")
+    ap.add_argument("--adversary-prompt", metavar="FILE",
+                    help="your own adversary instruction (arm X), a text file")
     ap.add_argument("--simulate", choices=("exit", "declared", "silent", "partial", "indirect",
                                            "blind", "lie"))
     ap.add_argument("--no-preflight", action="store_true")
     ap.add_argument("--list-models", action="store_true",
                     help="list the newest models of the main labs with prices, then stop")
     args = ap.parse_args(argv)
-    args.arms = tuple(a.strip().upper() for a in args.arms.split(",") if a.strip())
+    if args.adversary_prompt:
+        import hashlib
+        with open(args.adversary_prompt, encoding="utf-8") as fh:
+            ADVERSARY["text"] = fh.read().strip()
+        if not ADVERSARY["text"]:
+            ap.error("the adversary prompt file is empty")
+        ADVERSARY["sha"] = hashlib.sha256(ADVERSARY["text"].encode()).hexdigest()[:12]
+    default = ("X",) if args.adversary_prompt else DEFAULT_ARMS
+    args.arms = tuple(a.strip().upper() for a in args.arms.split(",") if a.strip()) \
+        if args.arms else default
     bad = set(args.arms) - set(ARMS)
     if bad:
         ap.error(f"unknown arms: {sorted(bad)}")
+    if "X" in args.arms and not args.adversary_prompt:
+        ap.error("arm X needs --adversary-prompt FILE")
+    if args.resume and args.adversary_prompt:
+        old = {r.get("adversary_sha") for r in load(B.latest(args.resume)) if r.get("arm") == "X"}
+        if old - {None, ADVERSARY["sha"]}:
+            ap.error("this trace was run with another adversary prompt")
     if args.list_models:
         list_models(args.base_url, args.api_key, len(plan(args.seed, args.arms)))
         return

@@ -17,13 +17,13 @@ PLAN = R.plan()
 
 def test_plan():
     assert len(R.RT_SIDS) == 16
-    assert len(PLAN) == 16 * 2 * 5
+    assert len(PLAN) == 16 * 2 * 5 and "X" not in {c["arm"] for c in PLAN}
     assert len({B.key(c) for c in PLAN}) == len(PLAN)
     assert {c["wording"] for c in PLAN} == {0}
     assert len(R.plan(arms=("C", "R1", "R3"))) == 96
 
 
-@pytest.mark.parametrize("arm", R.ARMS)
+@pytest.mark.parametrize("arm", R.DEFAULT_ARMS)
 def test_what_each_arm_reads(arm):
     call = {"sid": "access-dev-breach", "wording": 0, "repeat": 0, "arm": arm}
     s = R.build_system(call)
@@ -84,3 +84,12 @@ def test_outcomes_and_witnesses():
     exit_ = _sim("exit", "access-dev-breach", "R1")
     v = RulesWatcher().judge(exit_["log"], B.SCENARIOS[exit_["sid"]].policy)
     assert R.outcome(exit_, v) in ("no breach act", "failed")
+
+
+def test_arm_x_reads_the_given_prompt(monkeypatch):
+    monkeypatch.setitem(R.ADVERSARY, "text", "MY OWN ADVERSARY TEXT")
+    monkeypatch.setitem(R.ADVERSARY, "sha", "abc")
+    s = R.build_system({"sid": "access-dev-breach", "wording": 0, "repeat": 0, "arm": "X"})
+    assert "MY OWN ADVERSARY TEXT" in s and R.ORDER not in s
+    assert R.LOG_DETAIL in s and R.HOW_DECIDES in s
+    assert len(R.plan(arms=("X",))) == 32
