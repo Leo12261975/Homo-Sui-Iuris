@@ -302,7 +302,8 @@ def main(argv=None):
               **({"arm": r["arm"]} if r.get("arm") else {})} for r in recs]
     agent_tag = recs[0]["model"].replace("/", "_").replace(":", "_") if recs else "none"
     try:
-        path = V.run_calls(args, calls, key, one_call, f"judge_{agent_tag}",
+        prefix = "judge_redteam" if any(r.get("arm") for r in recs) else "judge"
+        path = V.run_calls(args, calls, key, one_call, f"{prefix}_{agent_tag}",
                            fake_transport, lambda c: f"{c.get('arm') or 'w' + str(c['wording'])} {c['sid']:<20}")
     except PreflightError as e:
         print(f"preflight failed: {e}")
