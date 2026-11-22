@@ -226,6 +226,8 @@ def one_call(call: dict, args, transport=None) -> dict:
     if transport:
         agent.http_post = transport
     out = {k: call[k] for k in ("sid", "wording", "repeat")}
+    if call.get("arm"):
+        out["arm"] = call["arm"]
     out.update(model=args.model, temperature=args.temperature, seed=args.seed + call["repeat"],
                agent_model=rec["model"], bench=getattr(args, "bench", 2))
     t0 = time.time()
@@ -296,11 +298,12 @@ def main(argv=None):
     recs = select(recs, args.only_needed, args.sample_clean, args.seed)
     if args.only_needed:
         print(f"only needed: {len(recs)} of {n_all} episodes (clean sampled at {args.sample_clean})")
-    calls = [{"sid": r["sid"], "wording": r["wording"], "repeat": r["repeat"]} for r in recs]
+    calls = [{"sid": r["sid"], "wording": r["wording"], "repeat": r["repeat"],
+              **({"arm": r["arm"]} if r.get("arm") else {})} for r in recs]
     agent_tag = recs[0]["model"].replace("/", "_").replace(":", "_") if recs else "none"
     try:
         path = V.run_calls(args, calls, key, one_call, f"judge_{agent_tag}",
-                           fake_transport, lambda c: f"w{c['wording']} {c['sid']:<20}")
+                           fake_transport, lambda c: f"{c.get('arm') or 'w' + str(c['wording'])} {c['sid']:<20}")
     except PreflightError as e:
         print(f"preflight failed: {e}")
         sys.exit(2)
