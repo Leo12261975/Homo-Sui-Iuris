@@ -146,6 +146,20 @@ def parse_tool(content: str):
 
 # ─────────────────────────── One episode ───────────────────────────
 
+def parse_debrief(content: str) -> str:
+    """The debrief comes as {"debrief": "..."} (the agent is asked for JSON
+    throughout); plain text is kept as it is."""
+    for m in re.finditer(r"\{", content or ""):
+        try:
+            obj, _ = json.JSONDecoder().raw_decode(content[m.start():])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict) and obj.get("debrief"):
+            d = obj["debrief"]
+            return d if isinstance(d, str) else json.dumps(d, ensure_ascii=False)
+    return content or ""
+
+
 def plan(seed: int = 1, repeats: int = REPEATS) -> list[dict]:
     calls = [{"sid": sid, "wording": w, "repeat": r}
              for sid in sorted(SCENARIOS) for w in WORDINGS for r in range(repeats)]
@@ -154,7 +168,9 @@ def plan(seed: int = 1, repeats: int = REPEATS) -> list[dict]:
 
 
 def key(rec) -> tuple:
-    return (rec["sid"], rec["wording"], rec["repeat"])
+    """One episode. `arm` is set only by the red team (bench_redteam.py); the
+    bench's own traces have none, so their keys are unchanged in meaning."""
+    return (rec["sid"], rec["wording"], rec["repeat"], rec.get("arm"))
 
 
 STRING_ARGS = ("path", "content", "method", "url", "token", "body", "job", "text")
@@ -232,7 +248,11 @@ def _jsonable(full):
 _FAKE = __import__("threading").local()   # the fake model's only window on the scenario
 
 
-def one_call(call: dict, args, transport=None) -> dict:
+def one_call(call: dict, args, transport=None, first=None, debrief=None) -> dict:
+    """first: builds the opening messages (default: the bench's own);
+    debrief: a function of the call giving one more user turn after finish,
+    answered in plain text and kept as `debrief` — never part of the log (red
+    team's second channel)."""
     sc = SCENARIOS[call["sid"]]
     _FAKE.sid = call["sid"]
     agent = LLMAgent(V.COSTS, model=args.model, base_url=args.base_url, api_key=args.api_key,
@@ -243,8 +263,8 @@ def one_call(call: dict, args, transport=None) -> dict:
     rec = dict(call, family=sc.family, twin=sc.twin, disc=sc.disc, half=sc.half,
                model=args.model, temperature=args.temperature, seed=args.seed + call["repeat"])
     world = World(sc)
-    messages = first_messages(call)
-    t0, cost, providers, bad, replies = time.time(), 0.0, set(), 0, []
+    messages = (first or first_messages)(call)
+    t0, cost, providers, bad, replies, thoughts = time.time(), 0.0, set(), 0, [], []
     try:
         while not world.finished:
             agent.meta = {}
@@ -254,6 +274,7 @@ def one_call(call: dict, args, transport=None) -> dict:
             if meta.get("provider"):
                 providers.add(meta["provider"])
             replies.append(content)
+            thoughts.append(meta.get("reasoning"))
             messages.append({"role": "assistant", "content": content})
             parsed = parse_tool(content)
             if parsed is None:
@@ -271,12 +292,24 @@ def one_call(call: dict, args, transport=None) -> dict:
             note = f"\n\n{LAST}" if len(world.log) == MAX_TOOLS - 1 and not world.finished else ""
             messages.append({"role": "user", "content":
                              RESULT[call["wording"]].format(out=str(out)[:2000]) + note})
+        if debrief and world.finished:
+            messages.append({"role": "user", "content": debrief(call)})
+            agent.meta = {}
+            content = call_with_retry(agent, messages)
+            cost += ((agent.meta or {}).get("usage") or {}).get("cost") or 0
+            messages.append({"role": "assistant", "content": content})
+            rec["debrief"] = parse_debrief(content)
+            rec["debrief_raw"] = content
+            if (agent.meta or {}).get("reasoning"):
+                rec["debrief_reasoning"] = agent.meta["reasoning"]
         rec["ok"] = True
     except ModelError as e:
         rec.update(ok=False, error=str(e))
     if not world.finished:
         rec["unfinished"] = True
         world.call("finish", report=[])
+    if any(thoughts):          # a reasoning model's text per reply; the watcher never reads it
+        rec["reasoning"] = thoughts
     rec.update(transcript=messages, replies=replies, log=world.log, full=_jsonable(world.full),
                report=world.report, done=world.done, n_tools=len(world.log) - 1,
                bad_replies=bad, providers=sorted(providers), cost=round(cost, 6),

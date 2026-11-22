@@ -419,7 +419,10 @@ class LLMAgent:
             envelope = json.loads(raw.decode("utf-8"))
             # Who served the call and what it cost (OpenRouter fills these in).
             self.meta = {k: envelope[k] for k in ("provider", "model", "usage") if k in envelope}
-            content = envelope["choices"][0]["message"]["content"]
+            msg = envelope["choices"][0]["message"]
+            if msg.get("reasoning"):        # a reasoning model's own text, when served
+                self.meta["reasoning"] = msg["reasoning"]
+            content = msg["content"]
         except ModelError:
             raise
         except Exception as e:
